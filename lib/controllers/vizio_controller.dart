@@ -2,6 +2,7 @@ import 'package:universal_tv_remote/controllers/tv_remote_controller.dart';
 import 'package:universal_tv_remote/models/tv_app_info.dart';
 import 'package:universal_tv_remote/models/tv_device.dart';
 import 'package:universal_tv_remote/models/tv_favorite.dart';
+import 'package:universal_tv_remote/models/tv_input_info.dart';
 import 'package:universal_tv_remote/services/credential_store.dart';
 import 'package:universal_tv_remote/services/io_http.dart';
 import 'package:universal_tv_remote/services/vizio_app_catalog.dart';
@@ -64,8 +65,7 @@ class VizioController implements TvRemoteController {
       status = rawStatus['RESULT']?.toString();
     }
 
-    if (response.statusCode >= 400 ||
-        (status != null && status.toUpperCase() == 'FAILURE')) {
+    if (response.statusCode >= 400 || (status != null && status.toUpperCase() == 'FAILURE')) {
       throw TvRemoteException(
         'Vizio command failed (${response.statusCode}${status == null ? '' : ', $status'}).',
       );
@@ -187,6 +187,55 @@ class VizioController implements TvRemoteController {
 
   @override
   Future<void> home() => _key(4, 3);
+
+  @override
+  Future<void> menu() => _key(4, 8);
+
+  @override
+  Future<List<TvInputInfo>> getInputs() async {
+    final response = await _request(
+      '/menu_native/dynamic/tv_settings/devices/name_input',
+    );
+    final items = response?['ITEMS'];
+    if (items is! List) {
+      return const [];
+    }
+
+    return items
+        .whereType<Map>()
+        .map((item) {
+          final map = Map<String, dynamic>.from(item);
+          final id = map['NAME']?.toString();
+          final hash = int.tryParse(map['HASHVAL'].toString());
+          final value = map['VALUE'];
+          final customName = value is Map ? value['NAME']?.toString().trim() : null;
+          if (id == null || id.isEmpty || hash == null) {
+            return null;
+          }
+          final title = customName == null || customName.isEmpty ? id : '$id • $customName';
+          return TvInputInfo(id: id, title: title, stateToken: hash);
+        })
+        .whereType<TvInputInfo>()
+        .toList(growable: false);
+  }
+
+  @override
+  Future<void> switchInput(TvInputInfo input) async {
+    final hash = input.stateToken;
+    if (hash == null) {
+      throw const TvRemoteException('Vizio input information was incomplete.');
+    }
+
+    await _request(
+      '/menu_native/dynamic/tv_settings/devices/current_input',
+      method: 'PUT',
+      body: {
+        'REQUEST': 'MODIFY',
+        'VALUE': input.id,
+        'HASHVAL': hash,
+      },
+    );
+  }
 
   @override
   Future<void> volumeUp() => _key(5, 1);

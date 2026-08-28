@@ -1,5 +1,6 @@
 import 'package:universal_tv_remote/models/tv_app_info.dart';
 import 'package:universal_tv_remote/models/tv_favorite.dart';
+import 'package:universal_tv_remote/models/tv_input_info.dart';
 
 abstract interface class TvRemoteController {
   bool get isConnected;
@@ -15,6 +16,10 @@ abstract interface class TvRemoteController {
 
   Future<void> back();
   Future<void> home();
+  Future<void> menu();
+
+  Future<List<TvInputInfo>> getInputs();
+  Future<void> switchInput(TvInputInfo input);
 
   Future<void> volumeUp();
   Future<void> volumeDown();

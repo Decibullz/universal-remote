@@ -2,6 +2,7 @@ import 'package:universal_tv_remote/controllers/tv_remote_controller.dart';
 import 'package:universal_tv_remote/models/tv_app_info.dart';
 import 'package:universal_tv_remote/models/tv_device.dart';
 import 'package:universal_tv_remote/models/tv_favorite.dart';
+import 'package:universal_tv_remote/models/tv_input_info.dart';
 import 'package:universal_tv_remote/services/io_http.dart';
 
 class RokuController implements TvRemoteController {
@@ -89,6 +90,23 @@ class RokuController implements TvRemoteController {
 
   @override
   Future<void> home() => _keypress('Home');
+
+  @override
+  Future<void> menu() => _keypress('Info');
+
+  @override
+  Future<List<TvInputInfo>> getInputs() async {
+    final apps = await getApps();
+    return apps
+        .where((app) => app.id.toLowerCase().startsWith('tvinput.'))
+        .map((app) => TvInputInfo(id: app.id, title: app.title))
+        .toList(growable: false);
+  }
+
+  @override
+  Future<void> switchInput(TvInputInfo input) {
+    return _launchApp(TvAppInfo(id: input.id, title: input.title));
+  }
 
   @override
   Future<void> volumeUp() => _keypress('VolumeUp');

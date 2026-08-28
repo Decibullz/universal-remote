@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:universal_tv_remote/controllers/tv_remote_controller.dart';
 import 'package:universal_tv_remote/models/tv_app_info.dart';
 import 'package:universal_tv_remote/models/tv_device.dart';
+import 'package:universal_tv_remote/models/tv_input_info.dart';
 import 'package:universal_tv_remote/screens/add_device_screen.dart';
 import 'package:universal_tv_remote/services/controller_factory.dart';
 import 'package:universal_tv_remote/services/credential_store.dart';
@@ -11,6 +12,7 @@ import 'package:universal_tv_remote/services/favorite_store.dart';
 import 'package:universal_tv_remote/widgets/dpad.dart';
 import 'package:universal_tv_remote/widgets/favorite_app_button.dart';
 import 'package:universal_tv_remote/widgets/favorite_picker_sheet.dart';
+import 'package:universal_tv_remote/widgets/input_picker_sheet.dart';
 import 'package:universal_tv_remote/widgets/keyboard_sheet.dart';
 
 enum RemoteConnectionState {
@@ -406,6 +408,8 @@ class _RemoteScreenState extends State<RemoteScreen> {
                     child: _RemoteButton(
                       icon: Icons.keyboard_return_rounded,
                       label: 'Back',
+                      vertical: true,
+                      height: 64,
                       onPressed:
                           connected ? () => _run(_controller!.back) : null,
                     ),
@@ -415,6 +419,8 @@ class _RemoteScreenState extends State<RemoteScreen> {
                     child: _RemoteButton(
                       icon: Icons.home_rounded,
                       label: 'Home',
+                      vertical: true,
+                      height: 64,
                       onPressed:
                           connected ? () => _run(_controller!.home) : null,
                     ),
@@ -422,9 +428,23 @@ class _RemoteScreenState extends State<RemoteScreen> {
                   const SizedBox(width: 9),
                   Expanded(
                     child: _RemoteButton(
-                      icon: Icons.keyboard_alt_outlined,
-                      label: 'Keyboard',
-                      onPressed: connected ? _showKeyboard : null,
+                      icon: Icons.input_rounded,
+                      label: 'Input',
+                      vertical: true,
+                      height: 64,
+                      onPressed:
+                          connected ? () => _showInputPicker(selected) : null,
+                    ),
+                  ),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: _RemoteButton(
+                      icon: Icons.menu_rounded,
+                      label: 'Menu',
+                      vertical: true,
+                      height: 64,
+                      onPressed:
+                          connected ? () => _run(_controller!.menu) : null,
                     ),
                   ),
                 ],
@@ -436,7 +456,7 @@ class _RemoteScreenState extends State<RemoteScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     SizedBox(
-                      width: 84,
+                      width: 76,
                       child: _RemoteButton(
                         icon: Icons.volume_off_rounded,
                         label: 'Mute',
@@ -456,6 +476,17 @@ class _RemoteScreenState extends State<RemoteScreen> {
                         onPressed: connected
                             ? () => _run(_controller!.playPause)
                             : null,
+                      ),
+                    ),
+                    const SizedBox(width: 9),
+                    SizedBox(
+                      width: 76,
+                      child: _RemoteButton(
+                        icon: Icons.keyboard_alt_outlined,
+                        label: 'Keyboard',
+                        vertical: true,
+                        iconSize: 28,
+                        onPressed: connected ? _showKeyboard : null,
                       ),
                     ),
                     const SizedBox(width: 9),
@@ -530,6 +561,28 @@ class _RemoteScreenState extends State<RemoteScreen> {
         device.id: List.unmodifiable(updated),
       };
     });
+  }
+
+  Future<void> _showInputPicker(TvDevice device) async {
+    final controller = _controller;
+    if (controller == null ||
+        _selected?.id != device.id ||
+        _connectionState != RemoteConnectionState.connected) {
+      return;
+    }
+
+    final input = await showModalBottomSheet<TvInputInfo>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      builder: (_) => InputPickerSheet(
+        deviceName: device.name,
+        loadInputs: controller.getInputs,
+      ),
+    );
+    if (input != null) {
+      await _run(() => controller.switchInput(input));
+    }
   }
 
   Future<void> _showKeyboard() async {
@@ -958,6 +1011,7 @@ class _RemoteButton extends StatelessWidget {
     required this.onPressed,
     this.vertical = false,
     this.iconSize = 22,
+    this.height,
   });
 
   final IconData icon;
@@ -965,6 +1019,7 @@ class _RemoteButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final bool vertical;
   final double iconSize;
+  final double? height;
 
   @override
   Widget build(BuildContext context) {
@@ -1025,7 +1080,7 @@ class _RemoteButton extends StatelessWidget {
                   onPressed!();
                 },
           child: SizedBox(
-            height: vertical ? 118 : 58,
+            height: height ?? (vertical ? 118 : 58),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 7),
               child: content,

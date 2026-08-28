@@ -6,6 +6,7 @@ import 'package:universal_tv_remote/controllers/tv_remote_controller.dart';
 import 'package:universal_tv_remote/models/tv_app_info.dart';
 import 'package:universal_tv_remote/models/tv_device.dart';
 import 'package:universal_tv_remote/models/tv_favorite.dart';
+import 'package:universal_tv_remote/models/tv_input_info.dart';
 import 'package:universal_tv_remote/services/credential_store.dart';
 
 class LgWebOsController implements TvRemoteController {
@@ -343,6 +344,33 @@ class LgWebOsController implements TvRemoteController {
 
   @override
   Future<void> home() => _button('HOME');
+
+  @override
+  Future<void> menu() => _button('MENU');
+
+  @override
+  Future<List<TvInputInfo>> getInputs() async {
+    final response = await _request('tv/getExternalInputList');
+    final devices = response['devices'];
+    if (devices is! List) {
+      return const [];
+    }
+
+    return devices.whereType<Map>().map((item) {
+      final map = Map<String, dynamic>.from(item);
+      final id = (map['inputId'] ?? map['id'])?.toString();
+      final label = (map['label'] ?? map['name'] ?? id)?.toString();
+      if (id == null || id.isEmpty || label == null || label.isEmpty) {
+        return null;
+      }
+      return TvInputInfo(id: id, title: label);
+    }).whereType<TvInputInfo>().toList(growable: false);
+  }
+
+  @override
+  Future<void> switchInput(TvInputInfo input) async {
+    await _request('tv/switchInput', payload: {'inputId': input.id});
+  }
 
   @override
   Future<void> volumeUp() async {
