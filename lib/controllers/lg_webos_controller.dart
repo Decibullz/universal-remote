@@ -443,10 +443,27 @@ class LgWebOsController implements TvRemoteController {
       );
     }
 
-    await _request(
-      'system.launcher/launch',
-      payload: {'id': match.id},
-    );
+    await launchApp(match);
+  }
+
+  @override
+  Future<void> launchApp(TvAppInfo app) async {
+    final legacyFavorite = _legacyFavorite(app);
+    if (legacyFavorite != null) {
+      await launchFavorite(legacyFavorite);
+      return;
+    }
+
+    await _request('system.launcher/launch', payload: {'id': app.id});
+  }
+
+  TvFavorite? _legacyFavorite(TvAppInfo app) {
+    for (final favorite in TvFavorite.values) {
+      if (app.id == favorite.name) {
+        return favorite;
+      }
+    }
+    return null;
   }
 
   TvAppInfo? _findFavorite(List<TvAppInfo> apps, TvFavorite favorite) {

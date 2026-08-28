@@ -1,25 +1,45 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:universal_tv_remote/models/tv_favorite.dart';
+import 'package:universal_tv_remote/models/tv_app_info.dart';
 
 class FavoriteAppButton extends StatelessWidget {
   const FavoriteAppButton({
-    required this.favorite,
+    required this.app,
     required this.onPressed,
+    required this.onLongPress,
     super.key,
   });
 
-  final TvFavorite favorite;
+  final TvAppInfo app;
   final VoidCallback? onPressed;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final (mark, brandColor, markSize) = switch (favorite) {
-      TvFavorite.hulu => ('hulu', const Color(0xFF1CE783), 14.0),
-      TvFavorite.netflix => ('N', const Color(0xFFE50914), 23.0),
-      TvFavorite.crunchyroll => ('◔', const Color(0xFFF47521), 25.0),
-      TvFavorite.mlb => ('MLB', const Color(0xFF3382D5), 13.0),
+    final title = app.title.toLowerCase();
+    final (mark, brandColor, markSize) = switch (title) {
+      final value when value.contains('hulu') => (
+          'hulu',
+          const Color(0xFF1CE783),
+          14.0,
+        ),
+      final value when value.contains('netflix') => (
+          'N',
+          const Color(0xFFE50914),
+          23.0,
+        ),
+      final value when value.contains('crunchyroll') => (
+          '◔',
+          const Color(0xFFF47521),
+          25.0,
+        ),
+      final value when value == 'mlb' || value.contains('mlb.tv') => (
+          'MLB',
+          const Color(0xFF3382D5),
+          13.0,
+        ),
+      _ => (_initials(app.title), colors.primary, 17.0),
     };
 
     return AnimatedOpacity(
@@ -41,6 +61,7 @@ class FavoriteAppButton extends StatelessWidget {
                   HapticFeedback.selectionClick();
                   onPressed!();
                 },
+          onLongPress: onLongPress,
           child: SizedBox(
             height: 64,
             child: Padding(
@@ -58,14 +79,14 @@ class FavoriteAppButton extends StatelessWidget {
                           fontSize: markSize,
                           height: 1,
                           fontWeight: FontWeight.w900,
-                          letterSpacing: favorite == TvFavorite.mlb ? -0.5 : 0,
+                          letterSpacing: mark == 'MLB' ? -0.5 : 0,
                         ),
                       ),
                     ),
                   ),
                   const SizedBox(height: 5),
                   Text(
-                    favorite.label,
+                    app.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
@@ -81,5 +102,21 @@ class FavoriteAppButton extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  static String _initials(String title) {
+    final words = title
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((word) => word.isNotEmpty)
+        .toList(growable: false);
+    if (words.isEmpty) {
+      return 'TV';
+    }
+    if (words.length == 1) {
+      return words.first.characters.take(2).join().toUpperCase();
+    }
+    return '${words.first.characters.first}${words.last.characters.first}'
+        .toUpperCase();
   }
 }

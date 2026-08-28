@@ -28,6 +28,7 @@ abstract interface class TvRemoteController {
   Future<void> enter();
 
   Future<List<TvAppInfo>> getApps();
+  Future<void> launchApp(TvAppInfo app);
   Future<void> launchFavorite(TvFavorite favorite);
 }
 

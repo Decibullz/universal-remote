@@ -167,16 +167,40 @@ class RokuController implements TvRemoteController {
       );
     }
 
+    await _launchApp(app);
+  }
+
+  @override
+  Future<void> launchApp(TvAppInfo app) async {
+    final legacyFavorite = _legacyFavorite(app);
+    if (legacyFavorite != null) {
+      await launchFavorite(legacyFavorite);
+      return;
+    }
+
+    await _launchApp(app);
+  }
+
+  Future<void> _launchApp(TvAppInfo app) async {
     final response = await IoHttp.request(
       _uri('/launch/${Uri.encodeComponent(app.id)}'),
       method: 'POST',
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw TvRemoteException(
-        'Roku could not launch ${favorite.label} '
+        'Roku could not launch ${app.title} '
         '(${response.statusCode}).',
       );
     }
+  }
+
+  TvFavorite? _legacyFavorite(TvAppInfo app) {
+    for (final favorite in TvFavorite.values) {
+      if (app.id == favorite.name) {
+        return favorite;
+      }
+    }
+    return null;
   }
 
   TvAppInfo? _findFavorite(List<TvAppInfo> apps, TvFavorite favorite) {

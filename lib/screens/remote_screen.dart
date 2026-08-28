@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:universal_tv_remote/controllers/tv_remote_controller.dart';
+import 'package:universal_tv_remote/models/tv_app_info.dart';
 import 'package:universal_tv_remote/models/tv_device.dart';
-import 'package:universal_tv_remote/models/tv_favorite.dart';
 import 'package:universal_tv_remote/screens/add_device_screen.dart';
 import 'package:universal_tv_remote/services/controller_factory.dart';
 import 'package:universal_tv_remote/services/credential_store.dart';
 import 'package:universal_tv_remote/services/device_store.dart';
+import 'package:universal_tv_remote/services/favorite_store.dart';
 import 'package:universal_tv_remote/widgets/dpad.dart';
 import 'package:universal_tv_remote/widgets/favorite_app_button.dart';
+import 'package:universal_tv_remote/widgets/favorite_picker_sheet.dart';
 import 'package:universal_tv_remote/widgets/keyboard_sheet.dart';
 
 enum RemoteConnectionState {
@@ -27,6 +29,7 @@ class RemoteScreen extends StatefulWidget {
 
 class _RemoteScreenState extends State<RemoteScreen> {
   List<TvDevice> _devices = const [];
+  Map<String, List<TvAppInfo>> _favoritesByDevice = const {};
   TvDevice? _selected;
   TvRemoteController? _controller;
   RemoteConnectionState _connectionState = RemoteConnectionState.idle;
@@ -47,6 +50,12 @@ class _RemoteScreenState extends State<RemoteScreen> {
   Future<void> _load() async {
     final devices = await DeviceStore.instance.loadDevices();
     final selectedId = await DeviceStore.instance.selectedDeviceId();
+    final favoriteEntries = await Future.wait(
+      devices.map((device) async {
+        final favorites = await FavoriteStore.instance.load(device.id);
+        return MapEntry(device.id, favorites);
+      }),
+    );
 
     TvDevice? selected;
     if (devices.isNotEmpty) {
@@ -68,6 +77,7 @@ class _RemoteScreenState extends State<RemoteScreen> {
     setState(() {
       _devices = devices;
       _selected = selected;
+      _favoritesByDevice = Map.fromEntries(favoriteEntries);
     });
 
     if (selected != null) {
@@ -122,6 +132,7 @@ class _RemoteScreenState extends State<RemoteScreen> {
     }
 
     final devices = [..._devices, device];
+    final favorites = await FavoriteStore.instance.load(device.id);
     await DeviceStore.instance.saveDevices(devices);
     await DeviceStore.instance.setSelectedDeviceId(device.id);
 
@@ -132,6 +143,10 @@ class _RemoteScreenState extends State<RemoteScreen> {
     setState(() {
       _devices = devices;
       _selected = device;
+      _favoritesByDevice = {
+        ..._favoritesByDevice,
+        device.id: favorites,
+      };
     });
     await _connect(device);
   }
@@ -171,7 +186,9 @@ class _RemoteScreenState extends State<RemoteScreen> {
     }
 
     final updated = device.copyWith(name: name);
-    final devices = _devices.map((item) => item.id == device.id ? updated : item).toList(growable: false);
+    final devices = _devices
+        .map((item) => item.id == device.id ? updated : item)
+        .toList(growable: false);
 
     await DeviceStore.instance.saveDevices(devices);
 
@@ -218,8 +235,10 @@ class _RemoteScreenState extends State<RemoteScreen> {
       _controller = null;
     }
 
-    final devices = _devices.where((item) => item.id != device.id).toList(growable: false);
+    final devices =
+        _devices.where((item) => item.id != device.id).toList(growable: false);
     await CredentialStore.instance.deleteDevice(device.id);
+    await FavoriteStore.instance.delete(device.id);
     await DeviceStore.instance.saveDevices(devices);
 
     final next = devices.isEmpty ? null : devices.first;
@@ -233,6 +252,9 @@ class _RemoteScreenState extends State<RemoteScreen> {
 
     setState(() {
       _devices = devices;
+      _favoritesByDevice = Map<String, List<TvAppInfo>>.from(
+        _favoritesByDevice,
+      )..remove(device.id);
       if (deletingSelected) {
         _selected = next;
         _connectionState = RemoteConnectionState.idle;
@@ -286,12 +308,8 @@ class _RemoteScreenState extends State<RemoteScreen> {
     final selected = _selected ?? _devices.first;
     final connected = _connectionState == RemoteConnectionState.connected;
 
-    const favorites = [
-      TvFavorite.netflix,
-      TvFavorite.hulu,
-      TvFavorite.crunchyroll,
-      TvFavorite.mlb,
-    ];
+    final favorites =
+        _favoritesByDevice[selected.id] ?? FavoriteStore.defaultFavorites;
     final colors = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -331,17 +349,36 @@ class _RemoteScreenState extends State<RemoteScreen> {
               const SizedBox(height: 16),
               Row(
                 children: [
+                  Text(
+                    'Favorites',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                  ),
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed:
+                        connected ? () => _editFavorites(selected) : null,
+                    icon: const Icon(Icons.edit_rounded, size: 17),
+                    label: const Text('Edit'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
                   for (var index = 0; index < favorites.length; index++) ...[
                     Expanded(
                       child: FavoriteAppButton(
-                        favorite: favorites[index],
+                        app: favorites[index],
                         onPressed: connected
                             ? () => _run(
-                                  () => _controller!.launchFavorite(
-                                    favorites[index],
-                                  ),
+                                  () =>
+                                      _controller!.launchApp(favorites[index]),
                                 )
                             : null,
+                        onLongPress:
+                            connected ? () => _editFavorites(selected) : null,
                       ),
                     ),
                     if (index != favorites.length - 1) const SizedBox(width: 8),
@@ -357,7 +394,8 @@ class _RemoteScreenState extends State<RemoteScreen> {
                     onDown: connected ? () => _run(_controller!.down) : null,
                     onLeft: connected ? () => _run(_controller!.left) : null,
                     onRight: connected ? () => _run(_controller!.right) : null,
-                    onSelect: connected ? () => _run(_controller!.select) : null,
+                    onSelect:
+                        connected ? () => _run(_controller!.select) : null,
                   ),
                 ),
               ),
@@ -368,7 +406,8 @@ class _RemoteScreenState extends State<RemoteScreen> {
                     child: _RemoteButton(
                       icon: Icons.keyboard_return_rounded,
                       label: 'Back',
-                      onPressed: connected ? () => _run(_controller!.back) : null,
+                      onPressed:
+                          connected ? () => _run(_controller!.back) : null,
                     ),
                   ),
                   const SizedBox(width: 9),
@@ -376,7 +415,8 @@ class _RemoteScreenState extends State<RemoteScreen> {
                     child: _RemoteButton(
                       icon: Icons.home_rounded,
                       label: 'Home',
-                      onPressed: connected ? () => _run(_controller!.home) : null,
+                      onPressed:
+                          connected ? () => _run(_controller!.home) : null,
                     ),
                   ),
                   const SizedBox(width: 9),
@@ -402,7 +442,8 @@ class _RemoteScreenState extends State<RemoteScreen> {
                         label: 'Mute',
                         vertical: true,
                         iconSize: 30,
-                        onPressed: connected ? () => _run(_controller!.mute) : null,
+                        onPressed:
+                            connected ? () => _run(_controller!.mute) : null,
                       ),
                     ),
                     const SizedBox(width: 9),
@@ -412,15 +453,21 @@ class _RemoteScreenState extends State<RemoteScreen> {
                         label: 'Play / Pause',
                         vertical: true,
                         iconSize: 36,
-                        onPressed: connected ? () => _run(_controller!.playPause) : null,
+                        onPressed: connected
+                            ? () => _run(_controller!.playPause)
+                            : null,
                       ),
                     ),
                     const SizedBox(width: 9),
                     SizedBox(
                       width: 84,
                       child: _VolumeRocker(
-                        onUp: connected ? () => _run(_controller!.volumeUp) : null,
-                        onDown: connected ? () => _run(_controller!.volumeDown) : null,
+                        onUp: connected
+                            ? () => _run(_controller!.volumeUp)
+                            : null,
+                        onDown: connected
+                            ? () => _run(_controller!.volumeDown)
+                            : null,
                       ),
                     ),
                   ],
@@ -444,6 +491,45 @@ class _RemoteScreenState extends State<RemoteScreen> {
         SnackBar(content: Text(error.toString())),
       );
     }
+  }
+
+  Future<void> _editFavorites(TvDevice device) async {
+    final controller = _controller;
+    if (controller == null ||
+        _selected?.id != device.id ||
+        _connectionState != RemoteConnectionState.connected) {
+      return;
+    }
+
+    final current =
+        _favoritesByDevice[device.id] ?? FavoriteStore.defaultFavorites;
+    final updated = await showModalBottomSheet<List<TvAppInfo>>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      useSafeArea: true,
+      builder: (_) => FavoritePickerSheet(
+        deviceName: device.name,
+        initialFavorites: current,
+        loadApps: controller.getApps,
+      ),
+    );
+
+    if (updated == null) {
+      return;
+    }
+
+    await FavoriteStore.instance.save(device.id, updated);
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _favoritesByDevice = {
+        ..._favoritesByDevice,
+        device.id: List.unmodifiable(updated),
+      };
+    });
   }
 
   Future<void> _showKeyboard() async {
@@ -498,7 +584,9 @@ class _RemoteScreenState extends State<RemoteScreen> {
             for (final device in _devices)
               ListTile(
                 leading: Icon(
-                  device.id == _selected?.id ? Icons.check_circle : Icons.tv_outlined,
+                  device.id == _selected?.id
+                      ? Icons.check_circle
+                      : Icons.tv_outlined,
                 ),
                 title: Text(device.name),
                 subtitle: Text('${device.brand.label} • ${device.host}'),
@@ -581,7 +669,9 @@ class _RemoteHeader extends StatelessWidget {
                   child: Row(
                     children: [
                       Icon(
-                        device.id == selected.id ? Icons.check_circle_rounded : Icons.tv_outlined,
+                        device.id == selected.id
+                            ? Icons.check_circle_rounded
+                            : Icons.tv_outlined,
                         size: 20,
                       ),
                       const SizedBox(width: 12),
@@ -720,7 +810,8 @@ class _DeviceSelector extends StatelessWidget {
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               color: statusColor,
-                              boxShadow: connectionState == RemoteConnectionState.connected
+                              boxShadow: connectionState ==
+                                      RemoteConnectionState.connected
                                   ? [
                                       BoxShadow(
                                         color: statusColor.withValues(
@@ -738,7 +829,10 @@ class _DeviceSelector extends StatelessWidget {
                             '${device.brand.label} • $status',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(
                                   color: colors.onSurfaceVariant,
                                   fontSize: 10,
                                   fontWeight: FontWeight.w600,
@@ -779,7 +873,9 @@ class _HeaderIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final background = destructive ? colors.errorContainer.withValues(alpha: 0.72) : colors.surfaceContainerHigh;
+    final background = destructive
+        ? colors.errorContainer.withValues(alpha: 0.72)
+        : colors.surfaceContainerHigh;
     final foreground = destructive ? colors.error : colors.onSurface;
 
     return AnimatedOpacity(

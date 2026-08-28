@@ -238,8 +238,13 @@ class VizioController implements TvRemoteController {
 
   @override
   Future<List<TvAppInfo>> getApps() async {
-    // Vizio's launch catalog is maintained remotely by SmartCast rather than
-    // exposed as a simple installed-app endpoint on the TV.
+    // Vizio maintains its launch catalog remotely rather than exposing a
+    // simple installed-app endpoint on the TV.
+    final catalogApps = await _catalog.listApps();
+    if (catalogApps.isNotEmpty) {
+      return catalogApps;
+    }
+
     return TvFavorite.values
         .map((favorite) => TvAppInfo(
               id: favorite.name,
@@ -250,10 +255,19 @@ class VizioController implements TvRemoteController {
 
   @override
   Future<void> launchFavorite(TvFavorite favorite) async {
-    final config = await _catalog.resolve(favorite);
+    await _launchCatalogApp(
+      TvAppInfo(id: favorite.name, title: favorite.label),
+    );
+  }
+
+  @override
+  Future<void> launchApp(TvAppInfo app) => _launchCatalogApp(app);
+
+  Future<void> _launchCatalogApp(TvAppInfo app) async {
+    final config = await _catalog.resolveApp(app);
     if (config == null) {
       throw TvRemoteException(
-        '${favorite.label} is not available in the current Vizio SmartCast catalog.',
+        '${app.title} is not available in the current Vizio SmartCast catalog.',
       );
     }
 
