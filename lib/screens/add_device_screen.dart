@@ -8,6 +8,7 @@ import 'package:universal_tv_remote/models/tv_brand.dart';
 import 'package:universal_tv_remote/models/tv_device.dart';
 import 'package:universal_tv_remote/services/credential_store.dart';
 import 'package:universal_tv_remote/services/discovery_service.dart';
+import 'package:universal_tv_remote/widgets/vizio_pin_dialog.dart';
 import 'package:uuid/uuid.dart';
 
 class AddDeviceScreen extends StatefulWidget {
@@ -342,39 +343,7 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
       return;
     }
 
-    final pinController = TextEditingController();
-    final pin = await showDialog<String>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('Enter Vizio PIN'),
-        content: TextField(
-          controller: pinController,
-          autofocus: true,
-          keyboardType: TextInputType.number,
-          maxLength: 8,
-          decoration: const InputDecoration(
-            labelText: 'PIN shown on TV',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final value = pinController.text.trim();
-              if (value.isNotEmpty) {
-                Navigator.pop(context, value);
-              }
-            },
-            child: const Text('Pair'),
-          ),
-        ],
-      ),
-    );
-    pinController.dispose();
+    final pin = await showVizioPinDialog(context);
 
     if (pin == null) {
       throw const TvRemoteException('Vizio pairing was canceled.');

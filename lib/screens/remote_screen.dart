@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:universal_tv_remote/controllers/tv_remote_controller.dart';
 import 'package:universal_tv_remote/models/tv_device.dart';
 import 'package:universal_tv_remote/models/tv_favorite.dart';
@@ -285,152 +286,148 @@ class _RemoteScreenState extends State<RemoteScreen> {
     final selected = _selected ?? _devices.first;
     final connected = _connectionState == RemoteConnectionState.connected;
 
+    const favorites = [
+      TvFavorite.netflix,
+      TvFavorite.hulu,
+      TvFavorite.crunchyroll,
+      TvFavorite.mlb,
+    ];
+    final colors = Theme.of(context).colorScheme;
+
     return Scaffold(
-      appBar: AppBar(
-        titleSpacing: 12,
-        title: DropdownButtonHideUnderline(
-          child: DropdownButton<TvDevice>(
-            value: selected,
-            borderRadius: BorderRadius.circular(16),
-            items: _devices
-                .map(
-                  (device) => DropdownMenuItem(
-                    value: device,
-                    child: Text(device.name),
-                  ),
-                )
-                .toList(),
-            onChanged: (device) {
-              if (device != null) {
-                _selectDevice(device);
-              }
-            },
+      backgroundColor: colors.surface,
+      body: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              colors.primaryContainer.withValues(alpha: 0.2),
+              colors.surface,
+              colors.surface,
+            ],
+            stops: const [0, 0.34, 1],
           ),
         ),
-        actions: [
-          IconButton(
-            tooltip: 'Manage TVs',
-            onPressed: _showManageDevices,
-            icon: const Icon(Icons.tune),
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
-          children: [
-            _StatusBar(
-              device: selected,
-              state: _connectionState,
-              error: _connectionError,
-              onReconnect: () => _connect(selected),
-            ),
-            const SizedBox(height: 18),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
+        child: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 28),
+            children: [
+              _RemoteHeader(
+                devices: _devices,
+                selected: selected,
+                connectionState: _connectionState,
+                onSelected: _selectDevice,
+                onManage: _showManageDevices,
+                onPower: connected ? () => _confirmPowerOff(selected) : null,
+              ),
+              if (_connectionState == RemoteConnectionState.error) ...[
+                const SizedBox(height: 10),
+                _ConnectionNotice(
+                  message: _connectionError ?? 'Could not connect to this TV.',
+                  onReconnect: () => _connect(selected),
+                ),
+              ],
+              const SizedBox(height: 16),
+              Row(
                 children: [
-                  for (final favorite in TvFavorite.values) ...[
-                    FavoriteAppButton(
-                      favorite: favorite,
-                      onPressed: connected
-                          ? () => _run(
-                                () => _controller!.launchFavorite(favorite),
-                              )
-                          : null,
+                  for (var index = 0; index < favorites.length; index++) ...[
+                    Expanded(
+                      child: FavoriteAppButton(
+                        favorite: favorites[index],
+                        onPressed: connected
+                            ? () => _run(
+                                  () => _controller!.launchFavorite(
+                                    favorites[index],
+                                  ),
+                                )
+                            : null,
+                      ),
                     ),
-                    if (favorite != TvFavorite.values.last) const SizedBox(width: 8),
+                    if (index != favorites.length - 1) const SizedBox(width: 8),
                   ],
                 ],
               ),
-            ),
-            const SizedBox(height: 28),
-            Center(
-              child: Dpad(
-                onUp: connected ? () => _run(_controller!.up) : () {},
-                onDown: connected ? () => _run(_controller!.down) : () {},
-                onLeft: connected ? () => _run(_controller!.left) : () {},
-                onRight: connected ? () => _run(_controller!.right) : () {},
-                onSelect: connected ? () => _run(_controller!.select) : () {},
+              const SizedBox(height: 22),
+              SizedBox(
+                width: double.infinity,
+                child: Center(
+                  child: Dpad(
+                    onUp: connected ? () => _run(_controller!.up) : null,
+                    onDown: connected ? () => _run(_controller!.down) : null,
+                    onLeft: connected ? () => _run(_controller!.left) : null,
+                    onRight: connected ? () => _run(_controller!.right) : null,
+                    onSelect: connected ? () => _run(_controller!.select) : null,
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(height: 26),
-            Row(
-              children: [
-                Expanded(
-                  child: _RemoteButton(
-                    icon: Icons.arrow_back,
-                    label: 'Back',
-                    onPressed: connected ? () => _run(_controller!.back) : null,
+              const SizedBox(height: 80),
+              Row(
+                children: [
+                  Expanded(
+                    child: _RemoteButton(
+                      icon: Icons.keyboard_return_rounded,
+                      label: 'Back',
+                      onPressed: connected ? () => _run(_controller!.back) : null,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _RemoteButton(
-                    icon: Icons.home_outlined,
-                    label: 'Home',
-                    onPressed: connected ? () => _run(_controller!.home) : null,
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: _RemoteButton(
+                      icon: Icons.home_rounded,
+                      label: 'Home',
+                      onPressed: connected ? () => _run(_controller!.home) : null,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _RemoteButton(
-                    icon: Icons.keyboard_alt_outlined,
-                    label: 'Keyboard',
-                    onPressed: connected ? _showKeyboard : null,
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: _RemoteButton(
+                      icon: Icons.keyboard_alt_outlined,
+                      label: 'Keyboard',
+                      onPressed: connected ? _showKeyboard : null,
+                    ),
                   ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                height: 118,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SizedBox(
+                      width: 84,
+                      child: _RemoteButton(
+                        icon: Icons.volume_off_rounded,
+                        label: 'Mute',
+                        vertical: true,
+                        iconSize: 30,
+                        onPressed: connected ? () => _run(_controller!.mute) : null,
+                      ),
+                    ),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: _RemoteButton(
+                        icon: Icons.play_arrow,
+                        label: 'Play / Pause',
+                        vertical: true,
+                        iconSize: 36,
+                        onPressed: connected ? () => _run(_controller!.playPause) : null,
+                      ),
+                    ),
+                    const SizedBox(width: 9),
+                    SizedBox(
+                      width: 84,
+                      child: _VolumeRocker(
+                        onUp: connected ? () => _run(_controller!.volumeUp) : null,
+                        onDown: connected ? () => _run(_controller!.volumeDown) : null,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _RemoteButton(
-                    icon: Icons.volume_down,
-                    label: 'Vol −',
-                    onPressed: connected ? () => _run(_controller!.volumeDown) : null,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _RemoteButton(
-                    icon: Icons.volume_off_outlined,
-                    label: 'Mute',
-                    onPressed: connected ? () => _run(_controller!.mute) : null,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _RemoteButton(
-                    icon: Icons.volume_up,
-                    label: 'Vol +',
-                    onPressed: connected ? () => _run(_controller!.volumeUp) : null,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _RemoteButton(
-                    icon: Icons.play_arrow,
-                    label: 'Play / Pause',
-                    onPressed: connected ? () => _run(_controller!.playPause) : null,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _RemoteButton(
-                    icon: Icons.power_settings_new,
-                    label: 'Power Off',
-                    onPressed: connected ? () => _confirmPowerOff(selected) : null,
-                  ),
-                ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -547,60 +544,310 @@ class _RemoteScreenState extends State<RemoteScreen> {
   }
 }
 
-class _StatusBar extends StatelessWidget {
-  const _StatusBar({
+class _RemoteHeader extends StatelessWidget {
+  const _RemoteHeader({
+    required this.devices,
+    required this.selected,
+    required this.connectionState,
+    required this.onSelected,
+    required this.onManage,
+    required this.onPower,
+  });
+
+  final List<TvDevice> devices;
+  final TvDevice selected;
+  final RemoteConnectionState connectionState;
+  final ValueChanged<TvDevice> onSelected;
+  final VoidCallback onManage;
+  final VoidCallback? onPower;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: PopupMenuButton<TvDevice>(
+            tooltip: 'Switch TV',
+            position: PopupMenuPosition.under,
+            offset: const Offset(0, 6),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
+            onSelected: onSelected,
+            itemBuilder: (context) => [
+              for (final device in devices)
+                PopupMenuItem(
+                  value: device,
+                  child: Row(
+                    children: [
+                      Icon(
+                        device.id == selected.id ? Icons.check_circle_rounded : Icons.tv_outlined,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              device.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            Text(
+                              device.brand.label,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+            child: _DeviceSelector(
+              device: selected,
+              connectionState: connectionState,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        _HeaderIconButton(
+          tooltip: 'Manage TVs',
+          icon: Icons.tune_rounded,
+          onPressed: onManage,
+        ),
+        const SizedBox(width: 8),
+        _HeaderIconButton(
+          tooltip: 'Power off',
+          icon: Icons.power_settings_new_rounded,
+          onPressed: onPower,
+          destructive: true,
+        ),
+      ],
+    );
+  }
+}
+
+class _DeviceSelector extends StatelessWidget {
+  const _DeviceSelector({
     required this.device,
-    required this.state,
-    required this.error,
-    required this.onReconnect,
+    required this.connectionState,
   });
 
   final TvDevice device;
-  final RemoteConnectionState state;
-  final String? error;
+  final RemoteConnectionState connectionState;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final (status, statusColor) = switch (connectionState) {
+      RemoteConnectionState.idle => ('Not connected', colors.outline),
+      RemoteConnectionState.connecting => ('Connecting…', colors.tertiary),
+      RemoteConnectionState.connected => ('Connected', const Color(0xFF35C779)),
+      RemoteConnectionState.error => ('Connection failed', colors.error),
+    };
+
+    return Material(
+      color: colors.surfaceContainerHigh,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(
+          color: colors.outlineVariant.withValues(alpha: 0.5),
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: SizedBox(
+        height: 54,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(11),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      colors.primary.withValues(alpha: 0.72),
+                      colors.primary,
+                    ],
+                  ),
+                ),
+                child: Icon(
+                  Icons.tv_rounded,
+                  size: 19,
+                  color: colors.onPrimary,
+                ),
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      device.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        if (connectionState == RemoteConnectionState.connecting)
+                          SizedBox.square(
+                            dimension: 7,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.5,
+                              color: statusColor,
+                            ),
+                          )
+                        else
+                          Container(
+                            width: 7,
+                            height: 7,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: statusColor,
+                              boxShadow: connectionState == RemoteConnectionState.connected
+                                  ? [
+                                      BoxShadow(
+                                        color: statusColor.withValues(
+                                          alpha: 0.45,
+                                        ),
+                                        blurRadius: 7,
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                          ),
+                        const SizedBox(width: 5),
+                        Flexible(
+                          child: Text(
+                            '${device.brand.label} • $status',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                  color: colors.onSurfaceVariant,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 20,
+                color: colors.onSurfaceVariant,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HeaderIconButton extends StatelessWidget {
+  const _HeaderIconButton({
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+    this.destructive = false,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback? onPressed;
+  final bool destructive;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final background = destructive ? colors.errorContainer.withValues(alpha: 0.72) : colors.surfaceContainerHigh;
+    final foreground = destructive ? colors.error : colors.onSurface;
+
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 180),
+      opacity: onPressed == null ? 0.45 : 1,
+      child: Material(
+        color: background,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: colors.outlineVariant.withValues(alpha: 0.5),
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Tooltip(
+          message: tooltip,
+          child: InkWell(
+            onTap: onPressed == null
+                ? null
+                : () {
+                    HapticFeedback.selectionClick();
+                    onPressed!();
+                  },
+            child: SizedBox.square(
+              dimension: 46,
+              child: Icon(icon, size: 22, color: foreground),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ConnectionNotice extends StatelessWidget {
+  const _ConnectionNotice({
+    required this.message,
+    required this.onReconnect,
+  });
+
+  final String message;
   final VoidCallback onReconnect;
 
   @override
   Widget build(BuildContext context) {
-    final (icon, text) = switch (state) {
-      RemoteConnectionState.idle => (Icons.circle_outlined, 'Not connected'),
-      RemoteConnectionState.connecting => (Icons.sync, 'Connecting…'),
-      RemoteConnectionState.connected => (Icons.circle, 'Connected'),
-      RemoteConnectionState.error => (Icons.error_outline, 'Connection failed'),
-    };
+    final colors = Theme.of(context).colorScheme;
 
     return Material(
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      color: colors.errorContainer.withValues(alpha: 0.7),
       borderRadius: BorderRadius.circular(16),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.fromLTRB(12, 7, 8, 7),
         child: Row(
           children: [
-            Icon(icon, size: 18),
-            const SizedBox(width: 10),
+            Icon(Icons.error_outline_rounded, size: 19, color: colors.error),
+            const SizedBox(width: 9),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '$text • ${device.brand.label}',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  Text(
-                    error ?? device.host,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
+              child: Text(
+                message,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
-            if (state == RemoteConnectionState.error)
-              IconButton(
-                tooltip: 'Reconnect',
-                onPressed: onReconnect,
-                icon: const Icon(Icons.refresh),
-              ),
+            TextButton(
+              onPressed: onReconnect,
+              child: const Text('Retry'),
+            ),
           ],
         ),
       ),
@@ -613,6 +860,157 @@ class _RemoteButton extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onPressed,
+    this.vertical = false,
+    this.iconSize = 22,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onPressed;
+  final bool vertical;
+  final double iconSize;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final content = vertical
+        ? Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: iconSize),
+              const SizedBox(height: 11),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          )
+        : Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: iconSize),
+              const SizedBox(width: 7),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          );
+
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 180),
+      opacity: onPressed == null ? 0.48 : 1,
+      child: Material(
+        color: colors.surfaceContainerHigh,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(
+            color: colors.outlineVariant.withValues(alpha: 0.5),
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onPressed == null
+              ? null
+              : () {
+                  HapticFeedback.selectionClick();
+                  onPressed!();
+                },
+          child: SizedBox(
+            height: vertical ? 118 : 58,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 7),
+              child: content,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _VolumeRocker extends StatelessWidget {
+  const _VolumeRocker({required this.onUp, required this.onDown});
+
+  final VoidCallback? onUp;
+  final VoidCallback? onDown;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final enabled = onUp != null || onDown != null;
+
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 180),
+      opacity: enabled ? 1 : 0.48,
+      child: Material(
+        color: colors.surfaceContainerHigh,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(21),
+          side: BorderSide(
+            color: colors.outlineVariant.withValues(alpha: 0.5),
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'VOL',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: colors.onSurfaceVariant,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.2,
+                    ),
+              ),
+            ),
+            Expanded(
+              child: _RockerButton(
+                icon: Icons.add_rounded,
+                label: 'Volume up',
+                onPressed: onUp,
+              ),
+            ),
+            Divider(
+              height: 1,
+              thickness: 1,
+              indent: 15,
+              endIndent: 15,
+              color: colors.outlineVariant.withValues(alpha: 0.55),
+            ),
+            Expanded(
+              child: _RockerButton(
+                icon: Icons.remove_rounded,
+                label: 'Volume down',
+                onPressed: onDown,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RockerButton extends StatelessWidget {
+  const _RockerButton({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
   });
 
   final IconData icon;
@@ -621,12 +1019,18 @@ class _RemoteButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 58,
-      child: FilledButton.tonalIcon(
-        onPressed: onPressed,
-        icon: Icon(icon),
-        label: Text(label),
+    return Semantics(
+      button: true,
+      enabled: onPressed != null,
+      label: label,
+      child: InkWell(
+        onTap: onPressed == null
+            ? null
+            : () {
+                HapticFeedback.selectionClick();
+                onPressed!();
+              },
+        child: Center(child: Icon(icon, size: 25)),
       ),
     );
   }
