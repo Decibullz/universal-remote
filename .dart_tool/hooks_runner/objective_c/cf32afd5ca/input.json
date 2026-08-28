@@ -1,0 +1,24 @@
+{
+  "assets": {},
+  "config": {
+    "build_asset_types": [
+      "code_assets/code"
+    ],
+    "extensions": {
+      "code_assets": {
+        "link_mode_preference": "dynamic",
+        "macos": {
+          "target_version": 12
+        },
+        "target_architecture": "x64",
+        "target_os": "macos"
+      }
+    },
+    "linking_enabled": false
+  },
+  "out_dir_shared": "/Users/codysnell/Downloads/universal_tv_remote/.dart_tool/hooks_runner/shared/objective_c/build/",
+  "out_file": "/Users/codysnell/Downloads/universal_tv_remote/.dart_tool/hooks_runner/objective_c/cf32afd5ca/output.json",
+  "package_name": "objective_c",
+  "package_root": "/Users/codysnell/.pub-cache/hosted/pub.dev/objective_c-9.6.0/",
+  "user_defines": {}
+}
