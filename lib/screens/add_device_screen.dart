@@ -23,6 +23,7 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
   final _manualNameController = TextEditingController();
 
   bool _scanning = false;
+  bool _scanCompleted = false;
   int _checked = 0;
   int _total = 254;
   List<DiscoveredTv> _found = const [];
@@ -37,6 +38,7 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
   Future<void> _scan() async {
     setState(() {
       _scanning = true;
+      _scanCompleted = false;
       _checked = 0;
       _found = const [];
     });
@@ -54,7 +56,10 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
       );
 
       if (mounted) {
-        setState(() => _found = results);
+        setState(() {
+          _found = results;
+          _scanCompleted = true;
+        });
       }
     } catch (error) {
       if (mounted) {
@@ -77,7 +82,8 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
           FilledButton.icon(
             onPressed: _scanning ? null : _scan,
             icon: const Icon(Icons.radar),
-            label: Text(_scanning ? 'Scanning $_checked / $_total' : 'Scan Wi-Fi'),
+            label:
+                Text(_scanning ? 'Scanning $_checked / $_total' : 'Scan Wi-Fi'),
           ),
           if (_scanning) ...[
             const SizedBox(height: 12),
@@ -109,6 +115,38 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
                     suggestedName: tv.suggestedName,
                     model: tv.model,
                   ),
+                ),
+              ),
+            ),
+          ],
+          if (_scanCompleted && _found.isEmpty) ...[
+            const SizedBox(height: 20),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.info_outline),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'No TVs found',
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                          const SizedBox(height: 6),
+                          const Text(
+                            'On iPhone, open Settings > Apps > Tv Remote and '
+                            'make sure Local Network is enabled. Also confirm '
+                            'the phone and TVs are on the same Wi-Fi network.',
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),

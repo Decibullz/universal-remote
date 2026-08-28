@@ -68,18 +68,74 @@ class DiscoveryService {
       includeLoopback: false,
     );
 
-    for (final interface in interfaces) {
-      for (final address in interface.addresses) {
-        final ip = address.address;
-        if (_isPrivate(ip)) {
-          return ip;
-        }
-      }
-    }
-    return null;
+    return selectPreferredPrivateIpv4(
+      interfaces.expand(
+        (interface) => interface.addresses.map(
+          (address) => (
+            interfaceName: interface.name,
+            address: address.address,
+          ),
+        ),
+      ),
+    );
   }
 
-  bool _isPrivate(String ip) {
+  /// Selects the LAN address that should be used for discovery.
+  ///
+  /// iOS can list cellular and VPN interfaces before Wi-Fi. Choosing the first
+  /// RFC1918 address can therefore scan a cellular/VPN subnet instead of the
+  /// network containing the TVs.
+  static String? selectPreferredPrivateIpv4(
+    Iterable<({String interfaceName, String address})> candidates,
+  ) {
+    final privateCandidates =
+        candidates.where((candidate) => _isPrivate(candidate.address)).toList();
+
+    if (privateCandidates.isEmpty) {
+      return null;
+    }
+
+    privateCandidates.sort((a, b) {
+      final priorityComparison = _interfacePriority(a).compareTo(
+        _interfacePriority(b),
+      );
+      return priorityComparison;
+    });
+
+    return privateCandidates.first.address;
+  }
+
+  static int _interfacePriority(
+    ({String interfaceName, String address}) candidate,
+  ) {
+    final name = candidate.interfaceName.toLowerCase();
+
+    // en0 is Wi-Fi on iPhone. Keep common non-Apple Wi-Fi names here so the
+    // selection remains correct when this service is reused on other devices.
+    if (name == 'en0' || name.startsWith('wlan') || name.contains('wifi')) {
+      return 0;
+    }
+
+    const nonLanPrefixes = [
+      'pdp_ip', // iOS cellular
+      'utun', // Apple VPN/tunnel
+      'ipsec',
+      'tun',
+      'tap',
+      'awdl', // Apple Wireless Direct Link
+      'llw',
+      'bridge',
+    ];
+    if (nonLanPrefixes.any(name.startsWith)) {
+      return 3;
+    }
+
+    // Most home Wi-Fi networks use 192.168/16. Prefer that range when the
+    // platform exposes an unfamiliar physical interface name.
+    return candidate.address.startsWith('192.168.') ? 1 : 2;
+  }
+
+  static bool _isPrivate(String ip) {
     final p = ip.split('.').map(int.tryParse).toList();
     if (p.length != 4 || p.any((value) => value == null)) {
       return false;
