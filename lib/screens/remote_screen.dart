@@ -329,185 +329,242 @@ class _RemoteScreenState extends State<RemoteScreen> {
             stops: const [0, 0.34, 1],
           ),
         ),
-        child: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 28),
-            children: [
-              _RemoteHeader(
-                devices: _devices,
-                selected: selected,
-                connectionState: _connectionState,
-                onSelected: _selectDevice,
-                onManage: _showManageDevices,
-                onPower: connected ? () => _confirmPowerOff(selected) : null,
-              ),
-              if (_connectionState == RemoteConnectionState.error) ...[
-                const SizedBox(height: 10),
-                _ConnectionNotice(
-                  message: _connectionError ?? 'Could not connect to this TV.',
-                  onReconnect: () => _connect(selected),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final top = _buildTopControls(
+              context,
+              selected: selected,
+              connected: connected,
+              favorites: favorites,
+            );
+            final dpad = _buildDpad(connected);
+            final bottom = _buildBottomControls(
+              selected: selected,
+              connected: connected,
+            );
+
+            if (constraints.maxHeight < 800) {
+              return SafeArea(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                  children: [
+                    top,
+                    const SizedBox(height: 22),
+                    Center(child: dpad),
+                    const SizedBox(height: 24),
+                    bottom,
+                  ],
+                ),
+              );
+            }
+
+            return Stack(
+              children: [
+                Center(child: dpad),
+                SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: SizedBox(width: double.infinity, child: top),
+                    ),
+                  ),
+                ),
+                SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                    child: Align(
+                      alignment: Alignment.bottomCenter,
+                      child: SizedBox(width: double.infinity, child: bottom),
+                    ),
+                  ),
                 ),
               ],
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Text(
-                    'Favorites',
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTopControls(
+    BuildContext context, {
+    required TvDevice selected,
+    required bool connected,
+    required List<TvAppInfo> favorites,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _RemoteHeader(
+          devices: _devices,
+          selected: selected,
+          connectionState: _connectionState,
+          onSelected: _selectDevice,
+          onManage: _showManageDevices,
+          onPower: connected ? () => _confirmPowerOff(selected) : null,
+        ),
+        if (_connectionState == RemoteConnectionState.error) ...[
+          const SizedBox(height: 10),
+          _ConnectionNotice(
+            message: _connectionError ?? 'Could not connect to this TV.',
+            onReconnect: () => _connect(selected),
+          ),
+        ],
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Text(
+              'Favorites',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
                   ),
-                  const Spacer(),
-                  TextButton.icon(
-                    onPressed:
-                        connected ? () => _editFavorites(selected) : null,
-                    icon: const Icon(Icons.edit_rounded, size: 17),
-                    label: const Text('Edit'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  for (var index = 0; index < favorites.length; index++) ...[
-                    Expanded(
-                      child: FavoriteAppButton(
-                        app: favorites[index],
-                        onPressed: connected
-                            ? () => _run(
-                                  () =>
-                                      _controller!.launchApp(favorites[index]),
-                                )
-                            : null,
-                        onLongPress:
-                            connected ? () => _editFavorites(selected) : null,
-                      ),
-                    ),
-                    if (index != favorites.length - 1) const SizedBox(width: 8),
-                  ],
-                ],
-              ),
-              const SizedBox(height: 22),
-              SizedBox(
-                width: double.infinity,
-                child: Center(
-                  child: Dpad(
-                    onUp: connected ? () => _run(_controller!.up) : null,
-                    onDown: connected ? () => _run(_controller!.down) : null,
-                    onLeft: connected ? () => _run(_controller!.left) : null,
-                    onRight: connected ? () => _run(_controller!.right) : null,
-                    onSelect:
-                        connected ? () => _run(_controller!.select) : null,
-                  ),
+            ),
+            const Spacer(),
+            TextButton.icon(
+              onPressed: connected ? () => _editFavorites(selected) : null,
+              icon: const Icon(Icons.edit_rounded, size: 17),
+              label: const Text('Edit'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            for (var index = 0; index < favorites.length; index++) ...[
+              Expanded(
+                child: FavoriteAppButton(
+                  app: favorites[index],
+                  onPressed: connected
+                      ? () => _run(
+                            () => _controller!.launchApp(favorites[index]),
+                          )
+                      : null,
+                  onLongPress:
+                      connected ? () => _editFavorites(selected) : null,
                 ),
               ),
-              const SizedBox(height: 80),
-              Row(
-                children: [
-                  Expanded(
-                    child: _RemoteButton(
-                      icon: Icons.keyboard_return_rounded,
-                      label: 'Back',
-                      vertical: true,
-                      height: 64,
-                      onPressed:
-                          connected ? () => _run(_controller!.back) : null,
-                    ),
-                  ),
-                  const SizedBox(width: 9),
-                  Expanded(
-                    child: _RemoteButton(
-                      icon: Icons.home_rounded,
-                      label: 'Home',
-                      vertical: true,
-                      height: 64,
-                      onPressed:
-                          connected ? () => _run(_controller!.home) : null,
-                    ),
-                  ),
-                  const SizedBox(width: 9),
-                  Expanded(
-                    child: _RemoteButton(
-                      icon: Icons.input_rounded,
-                      label: 'Input',
-                      vertical: true,
-                      height: 64,
-                      onPressed:
-                          connected ? () => _showInputPicker(selected) : null,
-                    ),
-                  ),
-                  const SizedBox(width: 9),
-                  Expanded(
-                    child: _RemoteButton(
-                      icon: Icons.menu_rounded,
-                      label: 'Menu',
-                      vertical: true,
-                      height: 64,
-                      onPressed:
-                          connected ? () => _run(_controller!.menu) : null,
-                    ),
-                  ),
-                ],
+              if (index != favorites.length - 1) const SizedBox(width: 8),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDpad(bool connected) {
+    return Dpad(
+      key: const Key('remote-dpad'),
+      onUp: connected ? () => _run(_controller!.up) : null,
+      onDown: connected ? () => _run(_controller!.down) : null,
+      onLeft: connected ? () => _run(_controller!.left) : null,
+      onRight: connected ? () => _run(_controller!.right) : null,
+      onSelect: connected ? () => _run(_controller!.select) : null,
+    );
+  }
+
+  Widget _buildBottomControls({
+    required TvDevice selected,
+    required bool connected,
+  }) {
+    return Column(
+      key: const Key('remote-bottom-controls'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _RemoteButton(
+                icon: Icons.keyboard_return_rounded,
+                label: 'Back',
+                vertical: true,
+                height: 64,
+                onPressed: connected ? () => _run(_controller!.back) : null,
               ),
-              const SizedBox(height: 10),
+            ),
+            const SizedBox(width: 9),
+            Expanded(
+              child: _RemoteButton(
+                icon: Icons.home_rounded,
+                label: 'Home',
+                vertical: true,
+                height: 64,
+                onPressed: connected ? () => _run(_controller!.home) : null,
+              ),
+            ),
+            const SizedBox(width: 9),
+            Expanded(
+              child: _RemoteButton(
+                icon: Icons.input_rounded,
+                label: 'Input',
+                vertical: true,
+                height: 64,
+                onPressed: connected ? () => _showInputPicker(selected) : null,
+              ),
+            ),
+            const SizedBox(width: 9),
+            Expanded(
+              child: _RemoteButton(
+                icon: Icons.menu_rounded,
+                label: 'Menu',
+                vertical: true,
+                height: 64,
+                onPressed: connected ? () => _run(_controller!.menu) : null,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 118,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
               SizedBox(
-                height: 118,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    SizedBox(
-                      width: 76,
-                      child: _RemoteButton(
-                        icon: Icons.volume_off_rounded,
-                        label: 'Mute',
-                        vertical: true,
-                        iconSize: 30,
-                        onPressed:
-                            connected ? () => _run(_controller!.mute) : null,
-                      ),
-                    ),
-                    const SizedBox(width: 9),
-                    Expanded(
-                      child: _RemoteButton(
-                        icon: Icons.play_arrow,
-                        label: 'Play / Pause',
-                        vertical: true,
-                        iconSize: 36,
-                        onPressed: connected
-                            ? () => _run(_controller!.playPause)
-                            : null,
-                      ),
-                    ),
-                    const SizedBox(width: 9),
-                    SizedBox(
-                      width: 76,
-                      child: _RemoteButton(
-                        icon: Icons.keyboard_alt_outlined,
-                        label: 'Keyboard',
-                        vertical: true,
-                        iconSize: 28,
-                        onPressed: connected ? _showKeyboard : null,
-                      ),
-                    ),
-                    const SizedBox(width: 9),
-                    SizedBox(
-                      width: 84,
-                      child: _VolumeRocker(
-                        onUp: connected
-                            ? () => _run(_controller!.volumeUp)
-                            : null,
-                        onDown: connected
-                            ? () => _run(_controller!.volumeDown)
-                            : null,
-                      ),
-                    ),
-                  ],
+                width: 76,
+                child: _RemoteButton(
+                  icon: Icons.volume_off_rounded,
+                  label: 'Mute',
+                  vertical: true,
+                  iconSize: 30,
+                  onPressed: connected ? () => _run(_controller!.mute) : null,
+                ),
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: _RemoteButton(
+                  icon: Icons.play_arrow,
+                  label: 'Play / Pause',
+                  vertical: true,
+                  iconSize: 36,
+                  onPressed:
+                      connected ? () => _run(_controller!.playPause) : null,
+                ),
+              ),
+              const SizedBox(width: 9),
+              SizedBox(
+                width: 76,
+                child: _RemoteButton(
+                  icon: Icons.keyboard_alt_outlined,
+                  label: 'Keyboard',
+                  vertical: true,
+                  iconSize: 28,
+                  onPressed: connected ? _showKeyboard : null,
+                ),
+              ),
+              const SizedBox(width: 9),
+              SizedBox(
+                width: 84,
+                child: _VolumeRocker(
+                  onUp: connected ? () => _run(_controller!.volumeUp) : null,
+                  onDown:
+                      connected ? () => _run(_controller!.volumeDown) : null,
                 ),
               ),
             ],
           ),
         ),
-      ),
+      ],
     );
   }
 

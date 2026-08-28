@@ -1,6 +1,7 @@
 import 'dart:ui' show Size;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/widgets.dart' show Key;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:universal_tv_remote/app.dart';
 
@@ -25,9 +26,8 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     SharedPreferences.setMockInitialValues({
-      'tv_remote.devices':
-          '[{"id":"living-room","name":"Living Room","brand":"roku",'
-              '"host":"127.0.0.1","port":8060,"model":"Test TV"}]',
+      'tv_remote.devices': '[{"id":"living-room","name":"Living Room","brand":"roku",'
+          '"host":"127.0.0.1","port":8060,"model":"Test TV"}]',
       'tv_remote.selected_device': 'living-room',
     });
 
@@ -43,6 +43,17 @@ void main() {
     expect(find.text('Menu'), findsOneWidget);
     expect(find.text('Play / Pause'), findsOneWidget);
     expect(find.text('Mute'), findsOneWidget);
+
+    final dpadBounds = tester.getRect(
+      find.byKey(const Key('remote-dpad')),
+    );
+    final bottomControlsBounds = tester.getRect(
+      find.byKey(const Key('remote-bottom-controls')),
+    );
+
+    expect(dpadBounds.center.dx, closeTo(195, 0.1));
+    expect(dpadBounds.center.dy, closeTo(422, 0.1));
+    expect(bottomControlsBounds.bottom, closeTo(840, 0.1));
     expect(tester.takeException(), isNull);
   });
 }

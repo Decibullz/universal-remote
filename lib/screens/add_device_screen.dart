@@ -12,14 +12,18 @@ import 'package:universal_tv_remote/widgets/vizio_pin_dialog.dart';
 import 'package:uuid/uuid.dart';
 
 class AddDeviceScreen extends StatefulWidget {
-  const AddDeviceScreen({super.key});
+  const AddDeviceScreen({
+    super.key,
+    this.discovery = const DiscoveryService(),
+  });
+
+  final DiscoveryService discovery;
 
   @override
   State<AddDeviceScreen> createState() => _AddDeviceScreenState();
 }
 
 class _AddDeviceScreenState extends State<AddDeviceScreen> {
-  final _discovery = const DiscoveryService();
   final _manualIpController = TextEditingController();
   final _manualNameController = TextEditingController();
 
@@ -45,7 +49,7 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
     });
 
     try {
-      final results = await _discovery.scan(
+      final results = await widget.discovery.scan(
         onProgress: (checked, total) {
           if (mounted) {
             setState(() {
@@ -75,117 +79,143 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Add TV')),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
+    final colors = Theme.of(context).colorScheme;
+
+    return PopScope(
+      canPop: !_scanning,
+      child: Stack(
         children: [
-          FilledButton.icon(
-            onPressed: _scanning ? null : _scan,
-            icon: const Icon(Icons.radar),
-            label:
-                Text(_scanning ? 'Scanning $_checked / $_total' : 'Scan Wi-Fi'),
-          ),
-          if (_scanning) ...[
-            const SizedBox(height: 12),
-            LinearProgressIndicator(
-              value: _total == 0 ? null : _checked / _total,
-            ),
-          ],
-          if (_found.isNotEmpty) ...[
-            const SizedBox(height: 24),
-            Text(
-              'Found TVs',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            ..._found.map(
-              (tv) => Card(
-                child: ListTile(
-                  leading: Icon(_brandIcon(tv.brand)),
-                  title: Text(tv.suggestedName),
-                  subtitle: Text(
-                    '${tv.brand.label} • ${tv.host}'
-                    '${tv.model == null ? '' : ' • ${tv.model}'}',
+          IgnorePointer(
+            ignoring: _scanning,
+            child: Scaffold(
+              appBar: AppBar(title: const Text('Add TV')),
+              body: ListView(
+                padding: const EdgeInsets.all(20),
+                children: [
+                  FilledButton.icon(
+                    onPressed: _scanning ? null : _scan,
+                    icon: const Icon(Icons.radar),
+                    label: Text(
+                      _scanning ? 'Scanning $_checked / $_total' : 'Scan Wi-Fi',
+                    ),
                   ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _configure(
-                    brand: tv.brand,
-                    host: tv.host,
-                    port: tv.port,
-                    suggestedName: tv.suggestedName,
-                    model: tv.model,
-                  ),
-                ),
-              ),
-            ),
-          ],
-          if (_scanCompleted && _found.isEmpty) ...[
-            const SizedBox(height: 20),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(Icons.info_outline),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'No TVs found',
-                            style: Theme.of(context).textTheme.titleSmall,
+                  if (_found.isNotEmpty) ...[
+                    const SizedBox(height: 24),
+                    Text(
+                      'Found TVs',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    ..._found.map(
+                      (tv) => Card(
+                        child: ListTile(
+                          leading: Icon(_brandIcon(tv.brand)),
+                          title: Text(tv.suggestedName),
+                          subtitle: Text(
+                            '${tv.brand.label} • ${tv.host}'
+                            '${tv.model == null ? '' : ' • ${tv.model}'}',
                           ),
-                          const SizedBox(height: 6),
-                          const Text(
-                            'On iPhone, open Settings > Apps > Tv Remote and '
-                            'make sure Local Network is enabled. Also confirm '
-                            'the phone and TVs are on the same Wi-Fi network.',
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => _configure(
+                            brand: tv.brand,
+                            host: tv.host,
+                            port: tv.port,
+                            suggestedName: tv.suggestedName,
+                            model: tv.model,
                           ),
-                        ],
+                        ),
                       ),
                     ),
                   ],
+                  if (_scanCompleted && _found.isEmpty) ...[
+                    const SizedBox(height: 20),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.info_outline),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'No TVs found',
+                                    style:
+                                        Theme.of(context).textTheme.titleSmall,
+                                  ),
+                                  const SizedBox(height: 6),
+                                  const Text(
+                                    'On iPhone, open Settings > Apps > Tv Remote and '
+                                    'make sure Local Network is enabled. Also confirm '
+                                    'the phone and TVs are on the same Wi-Fi network.',
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 28),
+                  Text(
+                    'Add by IP',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Use this if your network is not a typical /24 or scanning misses a TV.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _manualIpController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'TV IP address',
+                      hintText: '192.168.1.50',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: TvBrand.values
+                        .map(
+                          (brand) => ActionChip(
+                            avatar: Icon(_brandIcon(brand), size: 18),
+                            label: Text(brand.label),
+                            onPressed: () => _manualAdd(brand),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_scanning) ...[
+            ModalBarrier(
+              color: colors.scrim.withValues(alpha: 0.46),
+              dismissible: false,
+              semanticsLabel: 'TV scan in progress',
+            ),
+            Center(
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: _ScanProgressCard(
+                    checked: _checked,
+                    total: _total,
+                  ),
                 ),
               ),
             ),
           ],
-          const SizedBox(height: 28),
-          Text(
-            'Add by IP',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Use this if your network is not a typical /24 or scanning misses a TV.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _manualIpController,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'TV IP address',
-              hintText: '192.168.1.50',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: TvBrand.values
-                .map(
-                  (brand) => ActionChip(
-                    avatar: Icon(_brandIcon(brand), size: 18),
-                    label: Text(brand.label),
-                    onPressed: () => _manualAdd(brand),
-                  ),
-                )
-                .toList(),
-          ),
         ],
       ),
     );
@@ -200,7 +230,7 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
 
     int? port;
     if (brand == TvBrand.vizio) {
-      port = await _discovery.resolveVizioPort(host);
+      port = await widget.discovery.resolveVizioPort(host);
       if (port == null && mounted) {
         _showError(
           'No SmartCast API was found on $host (checked ports 7345 and 9000).',
@@ -365,5 +395,62 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
       TvBrand.roku => Icons.connected_tv,
       TvBrand.vizio => Icons.live_tv,
     };
+  }
+}
+
+class _ScanProgressCard extends StatelessWidget {
+  const _ScanProgressCard({required this.checked, required this.total});
+
+  final int checked;
+  final int total;
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = total == 0 ? null : checked / total;
+
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      label: 'Scanning Wi-Fi. Checked $checked of $total addresses.',
+      child: Card(
+        elevation: 12,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 320),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.radar_rounded, size: 40),
+                const SizedBox(height: 14),
+                Text(
+                  'Scanning Wi-Fi',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Checking $checked of $total addresses',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 18),
+                LinearProgressIndicator(
+                  key: const Key('tv-scan-progress'),
+                  value: progress,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Controls will unlock when the scan is complete.',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
