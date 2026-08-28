@@ -39,6 +39,8 @@ void main() {
     expect(find.text('Back'), findsOneWidget);
     expect(find.text('Home'), findsOneWidget);
     expect(find.text('Keyboard'), findsOneWidget);
+    expect(find.text('Input'), findsOneWidget);
+    expect(find.text('Menu'), findsOneWidget);
     expect(find.text('Play / Pause'), findsOneWidget);
     expect(find.text('Mute'), findsOneWidget);
     expect(tester.takeException(), isNull);

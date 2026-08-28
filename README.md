@@ -11,11 +11,12 @@ A private Flutter remote for TVs on your local network.
 - Remembers the last TV you used
 - D-pad + OK
 - Back + Home
+- Input picker + menu/options
 - Volume up/down + mute
 - Play / pause
 - Power off
 - iPhone/Android keyboard input
-- One-tap Hulu, Netflix, Crunchyroll, and MLB launch buttons
+- Four editable app favorites, saved separately for each TV
 - Add, rename, remove, and switch TVs
 - LAN scanning without SSDP/multicast on iPhone
 - LG and Vizio pairing credentials stored in secure storage
@@ -30,43 +31,173 @@ requests to the known TV APIs.
 That keeps the personal sideload simple. Manual IP entry is included for networks that
 are not /24.
 
-## First setup
+## Prerequisites
 
-This zip intentionally contains the app source but not generated `ios/` and `android/`
-folders. Generate those folders with the Flutter SDK you already use so the native
-projects exactly match your installed Flutter version.
+The checked-in project already contains its iOS files. On the Mac that will build the
+app, install Flutter and Xcode, open Xcode once to finish its setup, and sign in to your
+Apple Account under **Xcode > Settings > Accounts**.
 
-From the project folder:
+From the project folder, check the toolchain and restore packages:
+
+```bash
+flutter doctor -v
+flutter pub get
+```
+
+Only use the native bootstrap script if the `ios/` or `android/` directory has been
+deleted and needs to be recreated:
 
 ```bash
 dart run tool/bootstrap_native.dart
 ```
 
-That script:
+## Build and install on a connected iPhone
 
-1. Runs `flutter create` for iOS and Android.
-2. Restores the included app source.
-3. Adds iOS local-network/ATS configuration.
-4. Enables Android cleartext LAN traffic for Roku/LG.
-5. Runs `flutter pub get`.
+This project currently uses:
 
-Then:
+- Display name: `Tv Remote`
+- Bundle identifier: `com.codysnell.universalTvRemote`
+- Minimum iOS version: iOS 15.0
+
+### 1. Connect and prepare the iPhone
+
+1. Connect the iPhone to the Mac with a USB cable and unlock it.
+2. Tap **Trust** if either device asks whether to trust the other.
+3. Enable **Settings > Privacy & Security > Developer Mode** on the iPhone if prompted.
+4. Confirm Flutter can see it:
+
+   ```bash
+   flutter devices
+   ```
+
+The iPhone's device ID is shown in the second column. Keep the phone unlocked during
+the first build and launch.
+
+### 2. Configure signing the first time
+
+Open the iOS workspace, not the `.xcodeproj` file:
 
 ```bash
-flutter run
+open ios/Runner.xcworkspace
 ```
 
-## iPhone signing
+In Xcode:
 
-On your Mac:
+1. Select the **Runner** project and the **Runner** target.
+2. Open **Signing & Capabilities**.
+3. Enable **Automatically manage signing**.
+4. Select your Apple Developer Team.
+5. Confirm the bundle identifier is `com.codysnell.universalTvRemote`.
+6. Select the connected iPhone as the run destination.
 
-1. Open `ios/Runner.xcworkspace`.
-2. Select **Runner** > **Signing & Capabilities**.
-3. Pick your Apple Developer Team.
-4. Change the bundle identifier if desired.
-5. Select your iPhone and Run.
+An ordinary Apple Account can sign a development build for your own iPhone. A paid
+Apple Developer Program membership is required for the family distribution options
+below. See Flutter's [physical iOS device setup](https://docs.flutter.dev/get-started/install/macos/mobile-ios)
+if Xcode reports a signing or device-preparation error.
 
-No App Store Connect app record is required for development installation.
+### 3. Build, install, and run
+
+For a normal debug build:
+
+```bash
+flutter run -d <DEVICE_ID>
+```
+
+For a release build that is installed and launched on the connected iPhone:
+
+```bash
+flutter run --release -d <DEVICE_ID>
+```
+
+Replace `<DEVICE_ID>` with the value printed by `flutter devices`. You can also press
+Run in Xcode after choosing the physical iPhone.
+
+To create a signed release build without launching it:
+
+```bash
+flutter build ios --release
+```
+
+The app is created at `build/ios/iphoneos/Runner.app`. Flutter's
+[iOS release guide](https://docs.flutter.dev/deployment/ios) covers archive and IPA
+builds as well.
+
+The first time the remote opens, allow **Local Network** access. If scanning later
+returns no TVs, check **Settings > Apps > Tv Remote > Local Network** on the iPhone and
+make sure the phone and TVs are on the same non-guest Wi-Fi network.
+
+### Common device-build problems
+
+- **No supported devices:** unlock the phone, reconnect the cable, confirm Trust and
+  Developer Mode, then run `flutter devices` again.
+- **Signing requires a development team:** choose the team in Xcode's Runner target.
+- **Bundle identifier is unavailable:** change it to another globally unique reverse-
+  domain value in Xcode, then use that same identifier for distribution profiles.
+- **The app stopped opening with a free account:** free Personal Team provisioning
+  expires after seven days; reconnect and rebuild the app.
+
+## Share privately with family (without a public App Store listing)
+
+### Recommended: TestFlight
+
+TestFlight is the lowest-maintenance family option. The app is not published or
+searchable in the public App Store, although the developer must have a paid
+[Apple Developer Program membership](https://developer.apple.com/support/compare-memberships/)
+and create a private App Store Connect record. Family members only need an Apple
+Account and Apple's free TestFlight app.
+
+1. Enroll in the Apple Developer Program and finish the app's signing setup.
+2. Create an App Store Connect app using bundle ID
+   `com.codysnell.universalTvRemote`.
+3. Increase the build number in `pubspec.yaml` before each upload. For example,
+   change `version: 1.0.0+1` to `version: 1.0.0+2`.
+4. Build an App Store IPA:
+
+   ```bash
+   flutter build ipa --release
+   ```
+
+5. Upload the archive through Xcode Organizer, or upload the IPA from
+   `build/ios/ipa/` with Apple's Transporter app.
+6. In App Store Connect, open **TestFlight**, create an external testing group, add the
+   family members' email addresses, and select the build.
+7. After Apple's first external TestFlight review is approved, each family member can
+   accept the email invitation and install the build in TestFlight.
+
+TestFlight builds expire after 90 days, so upload a newer build before the current one
+expires. See Apple's [TestFlight overview](https://developer.apple.com/help/app-store-connect/test-a-beta-version/testflight-overview)
+and [external tester instructions](https://developer.apple.com/help/app-store-connect/test-a-beta-version/invite-external-testers).
+
+### Alternative: Ad Hoc IPA
+
+Ad Hoc distribution avoids a public listing and TestFlight beta review, but it requires
+more device management:
+
+1. Use a paid Apple Developer Program membership.
+2. Collect and register each family member's iPhone UDID in the developer account.
+3. Create an Ad Hoc provisioning profile for
+   `com.codysnell.universalTvRemote` that includes those devices.
+4. Build the IPA:
+
+   ```bash
+   flutter build ipa --release --export-method ad-hoc
+   ```
+
+5. Install the signed IPA from `build/ios/ipa/` onto each registered iPhone using a Mac
+   and Xcode or Apple Configurator.
+
+Apple allows up to 100 registered iPhones per membership year. Adding a new phone can
+require regenerating the provisioning profile and exporting a new IPA. Apple's
+[Ad Hoc profile guide](https://developer.apple.com/help/account/provisioning-profiles/create-an-ad-hoc-provisioning-profile)
+and [registered-device overview](https://developer.apple.com/help/account/devices/devices-overview)
+describe those requirements.
+
+### Why a free Apple Account is not practical for sharing
+
+Free Personal Team profiles expire after seven days and are limited to three test
+devices per platform. That is fine for development on your own phone, but family copies
+would need frequent rebuilding and reinstalling. TestFlight is the best fit here;
+choose Ad Hoc only if managing every device and installation manually is preferable.
 
 ## TV setup notes
 
@@ -141,5 +272,3 @@ Smart-TV local APIs are firmware-sensitive, especially Vizio. This project is de
 to surface a useful error message instead of failing silently. If one of your exact TV
 models responds differently, capture the model/firmware plus the error and adjust that
 brand controller without touching the rest of the app.
-# universal-remote
-# universal-remote

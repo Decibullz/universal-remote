@@ -32,6 +32,13 @@ class VizioController implements TvRemoteController {
 
   int get _port => device.port ?? 7345;
 
+  static ({int up, int right}) navigationCodesForPort(int port) {
+    // Port 9000 identifies the older SmartCast firmware generation, which
+    // uses the original D-pad codes. Newer port-7345 firmware uses the codes
+    // observed by the current Vizio mobile remote protocol.
+    return port == 9000 ? (up: 3, right: 5) : (up: 8, right: 7);
+  }
+
   Uri _uri(String path) => Uri.parse('https://${device.host}:$_port$path');
 
   @override
@@ -152,7 +159,7 @@ class VizioController implements TvRemoteController {
   }
 
   Future<void> _key(int codeset, int code) async {
-    final response = await _request(
+    await _request(
       '/key_command/',
       method: 'PUT',
       body: {
@@ -168,7 +175,7 @@ class VizioController implements TvRemoteController {
   }
 
   @override
-  Future<void> up() => _key(3, 8);
+  Future<void> up() => _key(3, navigationCodesForPort(_port).up);
 
   @override
   Future<void> down() => _key(3, 0);
@@ -177,7 +184,7 @@ class VizioController implements TvRemoteController {
   Future<void> left() => _key(3, 1);
 
   @override
-  Future<void> right() => _key(3, 7);
+  Future<void> right() => _key(3, navigationCodesForPort(_port).right);
 
   @override
   Future<void> select() => _key(3, 2);
