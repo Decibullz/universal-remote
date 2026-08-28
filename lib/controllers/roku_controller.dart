@@ -157,9 +157,11 @@ class RokuController implements TvRemoteController {
     );
 
     _apps = appExpression.allMatches(response.body).map((match) {
+      final id = match.group(1)!;
       return TvAppInfo(
-        id: match.group(1)!,
+        id: id,
         title: _decodeXml(match.group(2)!.trim()),
+        iconUrl: _uri('/query/icon/${Uri.encodeComponent(id)}').toString(),
       );
     }).toList(growable: false);
 
