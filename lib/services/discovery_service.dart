@@ -193,42 +193,77 @@ class DiscoveryService {
   }
 
   Future<DiscoveredTv?> _probeLg(String host) async {
-    Socket? socket;
-    try {
-      socket = await Socket.connect(
-        host,
-        3000,
-        timeout: const Duration(milliseconds: 400),
-      );
-      socket.destroy();
+    const endpoints = [
+      (urlScheme: 'ws', port: 3000, timeoutMs: 800),
+      (urlScheme: 'wss', port: 3001, timeoutMs: 1200),
+    ];
 
-      final ws = await WebSocket.connect('ws://$host:3000')
-          .timeout(const Duration(milliseconds: 700));
-      ws.add(jsonEncode({
+    for (final endpoint in endpoints) {
+      final found = await _probeLgEndpoint(
+        host,
+        scheme: endpoint.urlScheme,
+        port: endpoint.port,
+        timeout: Duration(milliseconds: endpoint.timeoutMs),
+      );
+      if (found) {
+        return DiscoveredTv(
+          host: host,
+          brand: TvBrand.lgWebOs,
+          suggestedName: 'LG TV',
+          port: endpoint.port,
+        );
+      }
+    }
+
+    return null;
+  }
+
+  Future<bool> _probeLgEndpoint(
+    String host, {
+    required String scheme,
+    required int port,
+    required Duration timeout,
+  }) async {
+    final client = HttpClient()
+      ..connectionTimeout = timeout
+      ..badCertificateCallback = (_, __, ___) => true;
+    WebSocket? socket;
+
+    try {
+      socket = await WebSocket.connect(
+        '$scheme://$host:$port',
+        customClient: client,
+      ).timeout(timeout);
+      socket.add(jsonEncode({
         'id': 'hello',
         'type': 'hello',
         'payload': <String, dynamic>{},
       }));
 
-      final response = await ws.first.timeout(
-        const Duration(milliseconds: 700),
-      );
-      await ws.close();
-
-      if (response is! String ||
-          !response.toLowerCase().contains('"type":"hello"')) {
-        return null;
-      }
-
-      return DiscoveredTv(
-        host: host,
-        brand: TvBrand.lgWebOs,
-        suggestedName: 'LG TV',
-        port: 3000,
-      );
+      final response = await socket.first.timeout(timeout);
+      return identifiesLgHello(response);
     } catch (_) {
-      socket?.destroy();
-      return null;
+      return false;
+    } finally {
+      try {
+        await socket?.close();
+      } catch (_) {
+        // The probe may have timed out or the TV may have closed the socket.
+      }
+      client.close(force: true);
+    }
+  }
+
+  static bool identifiesLgHello(Object? response) {
+    if (response is! String) {
+      return false;
+    }
+
+    try {
+      final decoded = jsonDecode(response);
+      return decoded is Map && decoded['type'] == 'hello';
+    } catch (_) {
+      return false;
     }
   }
 

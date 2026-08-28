@@ -98,7 +98,7 @@ class VizioController implements TvRemoteController {
       auth: false,
       body: {
         'DEVICE_ID': deviceId,
-        'DEVICE_NAME': 'Universal TV Remote',
+        'DEVICE_NAME': 'Tv Remote',
       },
     );
 

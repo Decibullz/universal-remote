@@ -7,7 +7,7 @@ class UniversalTvRemoteApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'TV Remote',
+      title: 'Tv Remote',
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.system,
       theme: ThemeData(

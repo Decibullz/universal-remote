@@ -247,7 +247,7 @@ class _RemoteScreenState extends State<RemoteScreen> {
   Widget build(BuildContext context) {
     if (_devices.isEmpty) {
       return Scaffold(
-        appBar: AppBar(title: const Text('TV Remote')),
+        appBar: AppBar(title: const Text('Tv Remote')),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(28),

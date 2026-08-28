@@ -9,7 +9,7 @@ void main() {
     await tester.pumpWidget(const UniversalTvRemoteApp());
     await tester.pumpAndSettle();
 
-    expect(find.text('TV Remote'), findsOneWidget);
+    expect(find.text('Tv Remote'), findsOneWidget);
     expect(find.text('No TVs yet'), findsOneWidget);
     expect(find.text('Add TV'), findsOneWidget);
   });
