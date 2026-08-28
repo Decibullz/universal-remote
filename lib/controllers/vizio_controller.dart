@@ -152,7 +152,7 @@ class VizioController implements TvRemoteController {
   }
 
   Future<void> _key(int codeset, int code) async {
-    await _request(
+    final response = await _request(
       '/key_command/',
       method: 'PUT',
       body: {
@@ -168,7 +168,7 @@ class VizioController implements TvRemoteController {
   }
 
   @override
-  Future<void> up() => _key(3, 3);
+  Future<void> up() => _key(3, 8);
 
   @override
   Future<void> down() => _key(3, 0);
@@ -177,7 +177,7 @@ class VizioController implements TvRemoteController {
   Future<void> left() => _key(3, 1);
 
   @override
-  Future<void> right() => _key(3, 5);
+  Future<void> right() => _key(3, 7);
 
   @override
   Future<void> select() => _key(3, 2);
