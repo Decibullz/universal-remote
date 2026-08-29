@@ -9,11 +9,21 @@ import 'package:universal_tv_remote/models/tv_favorite.dart';
 import 'package:universal_tv_remote/models/tv_input_info.dart';
 import 'package:universal_tv_remote/services/credential_store.dart';
 
+typedef LgRequestHandler = Future<Map<String, dynamic>> Function(
+  String uri,
+  Map<String, dynamic> payload,
+);
+
 class LgWebOsController implements TvRemoteController {
-  LgWebOsController(this.device, this.credentials);
+  LgWebOsController(
+    this.device,
+    this.credentials, {
+    LgRequestHandler? requestHandler,
+  }) : _requestHandler = requestHandler;
 
   final TvDevice device;
   final CredentialStore credentials;
+  final LgRequestHandler? _requestHandler;
 
   WebSocket? _socket;
   WebSocket? _inputSocket;
@@ -307,6 +317,11 @@ class LgWebOsController implements TvRemoteController {
     String? id,
     Duration timeout = const Duration(seconds: 8),
   }) {
+    final requestHandler = _requestHandler;
+    if (requestHandler != null) {
+      return requestHandler(uri, payload ?? <String, dynamic>{});
+    }
+
     final requestId = id ?? 'req_${_requestId++}';
     return _sendAndWait({
       'id': requestId,
@@ -471,7 +486,7 @@ class LgWebOsController implements TvRemoteController {
       );
     }
 
-    await launchApp(match);
+    await _launchApp(match);
   }
 
   @override
@@ -482,6 +497,10 @@ class LgWebOsController implements TvRemoteController {
       return;
     }
 
+    await _launchApp(app);
+  }
+
+  Future<void> _launchApp(TvAppInfo app) async {
     await _request('system.launcher/launch', payload: {'id': app.id});
   }
 

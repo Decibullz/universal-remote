@@ -125,18 +125,48 @@ class _RemoteScreenState extends State<RemoteScreen> {
   }
 
   Future<void> _addDevice() async {
-    final device = await Navigator.of(context).push<TvDevice>(
-      MaterialPageRoute(builder: (_) => const AddDeviceScreen()),
+    final result = await Navigator.of(context).push<AddDevicesResult>(
+      MaterialPageRoute(
+        builder: (_) => AddDeviceScreen(existingDevices: _devices),
+      ),
     );
 
-    if (device == null) {
+    if (result == null) {
       return;
     }
 
-    final devices = [..._devices, device];
-    final favorites = await FavoriteStore.instance.load(device.id);
+    final added = <TvDevice>[];
+    for (final device in result.devices) {
+      final duplicate = _devices.any(
+            (saved) => saved.brand == device.brand && saved.host == device.host,
+          ) ||
+          added.any(
+            (saved) => saved.brand == device.brand && saved.host == device.host,
+          );
+      if (!duplicate) {
+        added.add(device);
+      }
+    }
+
+    if (added.isEmpty) {
+      if (result.errors.isNotEmpty && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result.errors.join('\n'))),
+        );
+      }
+      return;
+    }
+
+    final favoriteEntries = await Future.wait(
+      added.map((device) async {
+        final favorites = await FavoriteStore.instance.load(device.id);
+        return MapEntry(device.id, favorites);
+      }),
+    );
+    final devices = [..._devices, ...added];
+    final selected = added.first;
     await DeviceStore.instance.saveDevices(devices);
-    await DeviceStore.instance.setSelectedDeviceId(device.id);
+    await DeviceStore.instance.setSelectedDeviceId(selected.id);
 
     if (!mounted) {
       return;
@@ -144,13 +174,24 @@ class _RemoteScreenState extends State<RemoteScreen> {
 
     setState(() {
       _devices = devices;
-      _selected = device;
+      _selected = selected;
       _favoritesByDevice = {
         ..._favoritesByDevice,
-        device.id: favorites,
+        ...Map.fromEntries(favoriteEntries),
       };
     });
-    await _connect(device);
+    await _connect(selected);
+
+    if (result.errors.isNotEmpty && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${added.length} TV${added.length == 1 ? '' : 's'} added. '
+            '${result.errors.join('\n')}',
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _renameDevice(TvDevice device) async {

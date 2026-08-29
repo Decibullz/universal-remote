@@ -11,13 +11,29 @@ import 'package:universal_tv_remote/services/discovery_service.dart';
 import 'package:universal_tv_remote/widgets/vizio_pin_dialog.dart';
 import 'package:uuid/uuid.dart';
 
+typedef DevicePairer = Future<void> Function(TvDevice device);
+
+class AddDevicesResult {
+  const AddDevicesResult({
+    required this.devices,
+    this.errors = const [],
+  });
+
+  final List<TvDevice> devices;
+  final List<String> errors;
+}
+
 class AddDeviceScreen extends StatefulWidget {
   const AddDeviceScreen({
     super.key,
     this.discovery = const DiscoveryService(),
+    this.existingDevices = const [],
+    this.pairDevice,
   });
 
   final DiscoveryService discovery;
+  final List<TvDevice> existingDevices;
+  final DevicePairer? pairDevice;
 
   @override
   State<AddDeviceScreen> createState() => _AddDeviceScreenState();
@@ -28,10 +44,15 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
   final _manualNameController = TextEditingController();
 
   bool _scanning = false;
+  bool _adding = false;
   bool _scanCompleted = false;
   int _checked = 0;
   int _total = 254;
+  int _addingIndex = 0;
+  int _addingTotal = 0;
+  String _addingName = '';
   List<DiscoveredTv> _found = const [];
+  Set<String> _selected = const {};
 
   @override
   void dispose() {
@@ -46,6 +67,7 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
       _scanCompleted = false;
       _checked = 0;
       _found = const [];
+      _selected = const {};
     });
 
     try {
@@ -63,6 +85,8 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
       if (mounted) {
         setState(() {
           _found = results;
+          _selected =
+              results.where((tv) => !_alreadySaved(tv)).map(_tvKey).toSet();
           _scanCompleted = true;
         });
       }
@@ -80,13 +104,19 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final busy = _scanning || _adding;
+    final available = _found.where((tv) => !_alreadySaved(tv)).toList();
+    final selectedCount =
+        available.where((tv) => _selected.contains(_tvKey(tv))).length;
+    final allSelected =
+        available.isNotEmpty && selectedCount == available.length;
 
     return PopScope(
-      canPop: !_scanning,
+      canPop: !busy,
       child: Stack(
         children: [
           IgnorePointer(
-            ignoring: _scanning,
+            ignoring: busy,
             child: Scaffold(
               appBar: AppBar(title: const Text('Add TV')),
               body: ListView(
@@ -101,31 +131,84 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
                   ),
                   if (_found.isNotEmpty) ...[
                     const SizedBox(height: 24),
-                    Text(
-                      'Found TVs',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    ..._found.map(
-                      (tv) => Card(
-                        child: ListTile(
-                          leading: Icon(_brandIcon(tv.brand)),
-                          title: Text(tv.suggestedName),
-                          subtitle: Text(
-                            '${tv.brand.label} • ${tv.host}'
-                            '${tv.model == null ? '' : ' • ${tv.model}'}',
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Found TVs',
+                            style: Theme.of(context).textTheme.titleMedium,
                           ),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => _configure(
-                            brand: tv.brand,
-                            host: tv.host,
-                            port: tv.port,
-                            suggestedName: tv.suggestedName,
-                            model: tv.model,
+                        ),
+                        if (available.isNotEmpty)
+                          TextButton(
+                            onPressed: () {
+                              setState(() {
+                                _selected = allSelected
+                                    ? <String>{}
+                                    : available.map(_tvKey).toSet();
+                              });
+                            },
+                            child: Text(allSelected ? 'Clear' : 'Select all'),
+                          ),
+                      ],
+                    ),
+                    Text(
+                      available.isEmpty
+                          ? 'Every discovered TV is already saved.'
+                          : 'Select every TV you want to add. You can rename them later.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 10),
+                    ..._found.map(
+                      (tv) {
+                        final saved = _alreadySaved(tv);
+                        final selected = _selected.contains(_tvKey(tv));
+                        return Card(
+                          child: CheckboxListTile(
+                            key: Key('discovered-tv-${_tvKey(tv)}'),
+                            value: saved || selected,
+                            onChanged: saved
+                                ? null
+                                : (value) {
+                                    setState(() {
+                                      final updated = Set<String>.from(
+                                        _selected,
+                                      );
+                                      if (value == true) {
+                                        updated.add(_tvKey(tv));
+                                      } else {
+                                        updated.remove(_tvKey(tv));
+                                      }
+                                      _selected = updated;
+                                    });
+                                  },
+                            secondary: Icon(_brandIcon(tv.brand)),
+                            title: Text(tv.suggestedName),
+                            subtitle: Text(
+                              '${tv.brand.label} • ${tv.host}'
+                              '${tv.model == null ? '' : ' • ${tv.model}'}'
+                              '${saved ? ' • Already added' : ''}',
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    if (available.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          key: const Key('add-selected-tvs'),
+                          onPressed: selectedCount == 0 ? null : _addSelected,
+                          icon: const Icon(Icons.add_to_queue_rounded),
+                          label: Text(
+                            selectedCount == 1
+                                ? 'Add selected TV'
+                                : 'Add $selectedCount selected TVs',
                           ),
                         ),
                       ),
-                    ),
+                    ],
                   ],
                   if (_scanCompleted && _found.isEmpty) ...[
                     const SizedBox(height: 20),
@@ -198,20 +281,26 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
               ),
             ),
           ),
-          if (_scanning) ...[
+          if (busy) ...[
             ModalBarrier(
               color: colors.scrim.withValues(alpha: 0.46),
               dismissible: false,
-              semanticsLabel: 'TV scan in progress',
+              semanticsLabel: _scanning ? 'TV scan in progress' : 'Adding TVs',
             ),
             Center(
               child: SafeArea(
                 child: Padding(
                   padding: const EdgeInsets.all(24),
-                  child: _ScanProgressCard(
-                    checked: _checked,
-                    total: _total,
-                  ),
+                  child: _scanning
+                      ? _ScanProgressCard(
+                          checked: _checked,
+                          total: _total,
+                        )
+                      : _AddDevicesProgressCard(
+                          current: _addingIndex,
+                          total: _addingTotal,
+                          name: _addingName,
+                        ),
                 ),
               ),
             ),
@@ -225,6 +314,11 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
     final host = _manualIpController.text.trim();
     if (!_validIpv4(host)) {
       _showError('Enter a valid IPv4 address.');
+      return;
+    }
+
+    if (_alreadySavedHost(brand, host)) {
+      _showError('${brand.label} at $host is already added.');
       return;
     }
 
@@ -302,7 +396,7 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
     }
 
     final device = TvDevice(
-      id: Uuid().v4(),
+      id: const Uuid().v4(),
       name: name,
       brand: brand,
       host: host,
@@ -310,33 +404,154 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
       model: model,
     );
 
+    setState(() {
+      _adding = true;
+      _addingIndex = 1;
+      _addingTotal = 1;
+      _addingName = device.name;
+    });
+
     try {
-      switch (brand) {
-        case TvBrand.roku:
-          await _pairRoku(device);
-          break;
-        case TvBrand.lgWebOs:
-          await _pairLg(device);
-          break;
-        case TvBrand.vizio:
-          await _pairVizio(device);
-          break;
-      }
+      await _pairDevice(device);
 
       if (mounted) {
-        Navigator.pop(context, device);
+        Navigator.pop(
+          context,
+          AddDevicesResult(devices: [device]),
+        );
       }
     } catch (error) {
       if (mounted) {
+        setState(() => _adding = false);
         _showError(error);
       }
     }
   }
 
+  Future<void> _addSelected() async {
+    final selectedTvs = _found
+        .where(
+          (tv) => !_alreadySaved(tv) && _selected.contains(_tvKey(tv)),
+        )
+        .toList(growable: false);
+    if (selectedTvs.isEmpty) {
+      return;
+    }
+
+    final usedNames = widget.existingDevices
+        .map((device) => device.name.toLowerCase())
+        .toSet();
+    final devices = <TvDevice>[];
+    for (final tv in selectedTvs) {
+      final name = _uniqueName(tv.suggestedName, usedNames);
+      usedNames.add(name.toLowerCase());
+      devices.add(
+        TvDevice(
+          id: const Uuid().v4(),
+          name: name,
+          brand: tv.brand,
+          host: tv.host,
+          port: tv.port,
+          model: tv.model,
+        ),
+      );
+    }
+
+    setState(() {
+      _adding = true;
+      _addingIndex = 0;
+      _addingTotal = devices.length;
+      _addingName = '';
+    });
+
+    final added = <TvDevice>[];
+    final errors = <String>[];
+    for (var index = 0; index < devices.length; index++) {
+      final device = devices[index];
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _addingIndex = index + 1;
+        _addingName = device.name;
+      });
+
+      try {
+        await _pairDevice(device);
+        added.add(device);
+      } catch (error) {
+        errors.add('${device.name}: $error');
+      }
+    }
+
+    if (!mounted) {
+      return;
+    }
+    if (added.isNotEmpty) {
+      Navigator.pop(
+        context,
+        AddDevicesResult(
+          devices: List.unmodifiable(added),
+          errors: List.unmodifiable(errors),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _adding = false);
+    _showError(errors.join('\n'));
+  }
+
+  Future<void> _pairDevice(TvDevice device) async {
+    final pairDevice = widget.pairDevice;
+    if (pairDevice != null) {
+      await pairDevice(device);
+      return;
+    }
+
+    switch (device.brand) {
+      case TvBrand.roku:
+        await _pairRoku(device);
+        break;
+      case TvBrand.lgWebOs:
+        await _pairLg(device);
+        break;
+      case TvBrand.vizio:
+        await _pairVizio(device);
+        break;
+    }
+  }
+
+  bool _alreadySaved(DiscoveredTv tv) => _alreadySavedHost(tv.brand, tv.host);
+
+  bool _alreadySavedHost(TvBrand brand, String host) {
+    return widget.existingDevices.any(
+      (device) => device.brand == brand && device.host == host,
+    );
+  }
+
+  String _tvKey(DiscoveredTv tv) => '${tv.brand.name}:${tv.host}';
+
+  String _uniqueName(String suggestedName, Set<String> usedNames) {
+    final base = suggestedName.trim().isEmpty ? 'TV' : suggestedName.trim();
+    if (!usedNames.contains(base.toLowerCase())) {
+      return base;
+    }
+
+    var suffix = 2;
+    while (usedNames.contains('$base $suffix'.toLowerCase())) {
+      suffix++;
+    }
+    return '$base $suffix';
+  }
+
   Future<void> _pairRoku(TvDevice device) async {
     final controller = RokuController(device);
-    await controller.connect();
-    await controller.disconnect();
+    try {
+      await controller.connect();
+    } finally {
+      await _disconnectQuietly(controller);
+    }
   }
 
   Future<void> _pairLg(TvDevice device) async {
@@ -345,21 +560,24 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
       CredentialStore.instance,
     );
 
-    final future = controller.connect();
+    try {
+      final future = controller.connect();
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          duration: Duration(seconds: 8),
-          content: Text(
-            'LG: accept the connection request on the TV if one appears.',
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            duration: Duration(seconds: 8),
+            content: Text(
+              'LG: accept the connection request on the TV if one appears.',
+            ),
           ),
-        ),
-      );
-    }
+        );
+      }
 
-    await future;
-    await controller.disconnect();
+      await future;
+    } finally {
+      await _disconnectQuietly(controller);
+    }
   }
 
   Future<void> _pairVizio(TvDevice device) async {
@@ -367,20 +585,31 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
       device,
       CredentialStore.instance,
     );
-    final session = await controller.startPairing();
+    try {
+      final session = await controller.startPairing();
 
-    if (!mounted) {
-      return;
+      if (!mounted) {
+        return;
+      }
+
+      final pin = await showVizioPinDialog(context);
+
+      if (pin == null) {
+        throw const TvRemoteException('Vizio pairing was canceled.');
+      }
+
+      await controller.completePairing(session, pin);
+    } finally {
+      await _disconnectQuietly(controller);
     }
+  }
 
-    final pin = await showVizioPinDialog(context);
-
-    if (pin == null) {
-      throw const TvRemoteException('Vizio pairing was canceled.');
+  Future<void> _disconnectQuietly(TvRemoteController controller) async {
+    try {
+      await controller.disconnect();
+    } catch (_) {
+      // Preserve the pairing result if cleanup encounters a closed socket.
     }
-
-    await controller.completePairing(session, pin);
-    await controller.disconnect();
   }
 
   void _showError(Object error) {
@@ -443,6 +672,66 @@ class _ScanProgressCard extends StatelessWidget {
                 const SizedBox(height: 12),
                 Text(
                   'Controls will unlock when the scan is complete.',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AddDevicesProgressCard extends StatelessWidget {
+  const _AddDevicesProgressCard({
+    required this.current,
+    required this.total,
+    required this.name,
+  });
+
+  final int current;
+  final int total;
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      label: 'Adding TV $current of $total. $name.',
+      child: Card(
+        elevation: 12,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 320),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.add_to_queue_rounded, size: 40),
+                const SizedBox(height: 14),
+                Text(
+                  'Adding TVs',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Pairing $current of $total${name.isEmpty ? '' : ': $name'}',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 18),
+                LinearProgressIndicator(
+                  key: const Key('add-tvs-progress'),
+                  value: total == 0 ? null : current / total,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Follow any pairing instructions shown on each TV.',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
