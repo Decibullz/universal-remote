@@ -47,6 +47,10 @@ void main() {
     expect(find.byKey(const Key('tv-status-panel')), findsOneWidget);
     expect(find.byKey(const Key('tv-power-status')), findsOneWidget);
     expect(find.byKey(const Key('tv-current-app')), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(const Key('tv-status-panel'))).height,
+      64,
+    );
 
     final dpadBounds = tester.getRect(
       find.byKey(const Key('remote-dpad')),

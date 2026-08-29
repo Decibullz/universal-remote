@@ -15,6 +15,7 @@ import 'package:universal_tv_remote/services/favorite_store.dart';
 import 'package:universal_tv_remote/widgets/dpad.dart';
 import 'package:universal_tv_remote/widgets/favorite_app_button.dart';
 import 'package:universal_tv_remote/widgets/favorite_picker_sheet.dart';
+import 'package:universal_tv_remote/widgets/hold_repeat_button.dart';
 import 'package:universal_tv_remote/widgets/input_picker_sheet.dart';
 import 'package:universal_tv_remote/widgets/keyboard_sheet.dart';
 
@@ -507,8 +508,8 @@ class _RemoteScreenState extends State<RemoteScreen> {
     required bool connected,
     required List<TvAppInfo> favorites,
   }) {
-    final shouldTurnOn = !connected ||
-        _tvStatus?.powerState == TvPowerState.off;
+    final shouldTurnOn =
+        !connected || _tvStatus?.powerState == TvPowerState.off;
     final canUsePower = _connectionState != RemoteConnectionState.connecting;
 
     return Column(
@@ -522,9 +523,8 @@ class _RemoteScreenState extends State<RemoteScreen> {
           onManage: _showManageDevices,
           powerOn: shouldTurnOn,
           onPower: canUsePower
-              ? () => shouldTurnOn
-                  ? _turnOn(selected)
-                  : _confirmPowerOff(selected)
+              ? () =>
+                  shouldTurnOn ? _turnOn(selected) : _confirmPowerOff(selected)
               : null,
         ),
         const SizedBox(height: 10),
@@ -807,7 +807,8 @@ class _RemoteScreenState extends State<RemoteScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Turn off ${device.name}?'),
-        content: const Text('The TV will remain available for network wake-up.'),
+        content:
+            const Text('The TV will remain available for network wake-up.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -1243,100 +1244,101 @@ class _TvStatusPanel extends StatelessWidget {
       _ => 'Current app unavailable',
     };
 
-    return Material(
+    return SizedBox(
       key: const Key('tv-status-panel'),
-      color: colors.surfaceContainerHigh.withValues(alpha: 0.82),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: colors.outlineVariant.withValues(alpha: 0.45),
+      height: 64,
+      child: Material(
+        color: colors.surfaceContainerHigh.withValues(alpha: 0.82),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: colors.outlineVariant.withValues(alpha: 0.45),
+          ),
         ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                Text(
-                  'TV Status',
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        color: colors.onSurfaceVariant,
-                        fontWeight: FontWeight.w800,
-                      ),
-                ),
-                const Spacer(),
-                if (checking)
-                  const Padding(
-                    padding: EdgeInsets.only(right: 8),
-                    child: SizedBox.square(
-                      dimension: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  )
-                else
-                  IconButton(
-                    tooltip: 'Refresh TV status',
-                    onPressed: onRefresh,
-                    visualDensity: VisualDensity.compact,
-                    constraints: const BoxConstraints.tightFor(
-                      width: 32,
-                      height: 28,
-                    ),
-                    padding: EdgeInsets.zero,
-                    icon: const Icon(Icons.refresh_rounded, size: 18),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 2),
-            Row(
-              children: [
-                Container(
-                  width: 9,
-                  height: 9,
-                  decoration: BoxDecoration(
-                    color: powerColor,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 7),
-                Text(
-                  powerLabel,
-                  key: const Key('tv-power-status'),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                ),
-                const SizedBox(width: 12),
-                SizedBox(
-                  height: 18,
-                  child: VerticalDivider(
-                    width: 1,
-                    color: colors.outlineVariant,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Icon(
-                  Icons.apps_rounded,
-                  size: 17,
-                  color: colors.onSurfaceVariant,
-                ),
-                const SizedBox(width: 7),
-                Expanded(
-                  child: Text(
-                    appLabel,
-                    key: const Key('tv-current-app'),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          fontWeight: FontWeight.w600,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Text(
+                    'TV Status',
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                          color: colors.onSurfaceVariant,
+                          fontWeight: FontWeight.w800,
                         ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                  const Spacer(),
+                  SizedBox(
+                    width: 32,
+                    height: 28,
+                    child: checking
+                        ? const Center(
+                            child: SizedBox.square(
+                              dimension: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : IconButton(
+                            tooltip: 'Refresh TV status',
+                            onPressed: onRefresh,
+                            visualDensity: VisualDensity.compact,
+                            constraints: const BoxConstraints.expand(),
+                            padding: EdgeInsets.zero,
+                            icon: const Icon(Icons.refresh_rounded, size: 18),
+                          ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 2),
+              Row(
+                children: [
+                  Container(
+                    width: 9,
+                    height: 9,
+                    decoration: BoxDecoration(
+                      color: powerColor,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 7),
+                  Text(
+                    powerLabel,
+                    key: const Key('tv-power-status'),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    height: 18,
+                    child: VerticalDivider(
+                      width: 1,
+                      color: colors.outlineVariant,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Icon(
+                    Icons.apps_rounded,
+                    size: 17,
+                    color: colors.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      appLabel,
+                      key: const Key('tv-current-app'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1475,8 +1477,8 @@ class _RemoteButton extends StatelessWidget {
 class _VolumeRocker extends StatelessWidget {
   const _VolumeRocker({required this.onUp, required this.onDown});
 
-  final VoidCallback? onUp;
-  final VoidCallback? onDown;
+  final Future<void> Function()? onUp;
+  final Future<void> Function()? onDown;
 
   @override
   Widget build(BuildContext context) {
@@ -1510,10 +1512,13 @@ class _VolumeRocker extends StatelessWidget {
               ),
             ),
             Expanded(
-              child: _RockerButton(
-                icon: Icons.add_rounded,
-                label: 'Volume up',
+              child: HoldRepeatButton(
+                key: const Key('volume-up-button'),
+                semanticsLabel: 'Volume up',
                 onPressed: onUp,
+                child: const Center(
+                  child: Icon(Icons.add_rounded, size: 25),
+                ),
               ),
             ),
             Divider(
@@ -1524,44 +1529,17 @@ class _VolumeRocker extends StatelessWidget {
               color: colors.outlineVariant.withValues(alpha: 0.55),
             ),
             Expanded(
-              child: _RockerButton(
-                icon: Icons.remove_rounded,
-                label: 'Volume down',
+              child: HoldRepeatButton(
+                key: const Key('volume-down-button'),
+                semanticsLabel: 'Volume down',
                 onPressed: onDown,
+                child: const Center(
+                  child: Icon(Icons.remove_rounded, size: 25),
+                ),
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _RockerButton extends StatelessWidget {
-  const _RockerButton({
-    required this.icon,
-    required this.label,
-    required this.onPressed,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      enabled: onPressed != null,
-      label: label,
-      child: InkWell(
-        onTap: onPressed == null
-            ? null
-            : () {
-                HapticFeedback.selectionClick();
-                onPressed!();
-              },
-        child: Center(child: Icon(icon, size: 25)),
       ),
     );
   }
