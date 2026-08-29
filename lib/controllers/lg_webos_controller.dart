@@ -7,6 +7,7 @@ import 'package:universal_tv_remote/models/tv_app_info.dart';
 import 'package:universal_tv_remote/models/tv_device.dart';
 import 'package:universal_tv_remote/models/tv_favorite.dart';
 import 'package:universal_tv_remote/models/tv_input_info.dart';
+import 'package:universal_tv_remote/models/tv_status.dart';
 import 'package:universal_tv_remote/services/credential_store.dart';
 
 typedef LgRequestHandler = Future<Map<String, dynamic>> Function(
@@ -439,6 +440,94 @@ class LgWebOsController implements TvRemoteController {
   @override
   Future<void> enter() async {
     await _request('com.webos.service.ime/sendEnterKey');
+  }
+
+  @override
+  Future<TvStatus> getStatus() async {
+    if (!isConnected && _requestHandler == null) {
+      return const TvStatus(powerState: TvPowerState.off);
+    }
+
+    var powerState = TvPowerState.on;
+    try {
+      final power = await _request(
+        'com.webos.service.tvpower/power/getPowerState',
+        timeout: const Duration(seconds: 3),
+      );
+      powerState = powerStateFromPayload(power);
+    } catch (_) {
+      powerState = isConnected || _requestHandler != null
+          ? TvPowerState.on
+          : TvPowerState.off;
+    }
+
+    if (powerState == TvPowerState.off) {
+      return const TvStatus(powerState: TvPowerState.off);
+    }
+
+    String? appId;
+    String? title;
+    try {
+      final foreground = await _request(
+        'com.webos.applicationManager/getForegroundAppInfo',
+        timeout: const Duration(seconds: 3),
+      );
+      appId = (foreground['appId'] ?? foreground['id'])?.toString();
+      title = (foreground['appName'] ?? foreground['title'])?.toString();
+    } catch (_) {
+      // Older webOS versions may not expose foreground app information.
+    }
+
+    if ((title == null || title.trim().isEmpty) && appId != null) {
+      title = await _titleForAppId(appId);
+    }
+
+    return TvStatus(
+      powerState: powerState,
+      currentApp: title?.trim().isEmpty == false ? title!.trim() : null,
+    );
+  }
+
+  static TvPowerState powerStateFromPayload(Map<String, dynamic> payload) {
+    final value = (payload['state'] ?? payload['powerState'])
+        ?.toString()
+        .toLowerCase()
+        .replaceAll(RegExp('[^a-z]'), '');
+    return switch (value) {
+      'active' || 'on' || 'poweron' => TvPowerState.on,
+      'screenoff' ||
+      'suspend' ||
+      'activestandby' ||
+      'off' ||
+      'poweroff' =>
+        TvPowerState.off,
+      _ => TvPowerState.unknown,
+    };
+  }
+
+  Future<String?> _titleForAppId(String appId) async {
+    final normalized = appId.toLowerCase();
+    if (normalized.contains('livetv')) {
+      return 'Live TV';
+    }
+    if (normalized.contains('home') || normalized.contains('launcher')) {
+      return 'Home';
+    }
+    if (normalized.contains('externalinput')) {
+      return 'External Input';
+    }
+
+    try {
+      final apps = await getApps();
+      for (final app in apps) {
+        if (app.id == appId) {
+          return app.title;
+        }
+      }
+    } catch (_) {
+      // Leave the app unknown while preserving the power status.
+    }
+    return null;
   }
 
   @override

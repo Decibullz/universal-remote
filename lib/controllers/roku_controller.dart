@@ -3,6 +3,7 @@ import 'package:universal_tv_remote/models/tv_app_info.dart';
 import 'package:universal_tv_remote/models/tv_device.dart';
 import 'package:universal_tv_remote/models/tv_favorite.dart';
 import 'package:universal_tv_remote/models/tv_input_info.dart';
+import 'package:universal_tv_remote/models/tv_status.dart';
 import 'package:universal_tv_remote/services/io_http.dart';
 
 class RokuController implements TvRemoteController {
@@ -138,6 +139,75 @@ class RokuController implements TvRemoteController {
   Future<void> enter() => _keypress('Enter');
 
   @override
+  Future<TvStatus> getStatus() async {
+    try {
+      final deviceInfo = await IoHttp.request(
+        _uri('/query/device-info'),
+        timeout: const Duration(seconds: 3),
+      );
+      if (deviceInfo.statusCode != 200) {
+        return const TvStatus(powerState: TvPowerState.unknown);
+      }
+
+      String activeApp = '';
+      try {
+        final response = await IoHttp.request(
+          _uri('/query/active-app'),
+          timeout: const Duration(seconds: 3),
+        );
+        if (response.statusCode == 200) {
+          activeApp = response.body;
+        }
+      } catch (_) {
+        // Power state is still useful if the active-app query is unavailable.
+      }
+
+      return statusFromXml(deviceInfo.body, activeApp);
+    } catch (_) {
+      return const TvStatus(powerState: TvPowerState.off);
+    }
+  }
+
+  static TvStatus statusFromXml(String deviceInfo, String activeApp) {
+    String? tag(String source, String name) {
+      return RegExp(
+        '<$name>(.*?)</$name>',
+        caseSensitive: false,
+        dotAll: true,
+      ).firstMatch(source)?.group(1)?.trim();
+    }
+
+    final rawPower = tag(deviceInfo, 'power-mode')?.toLowerCase();
+    final powerState = switch (rawPower) {
+      'poweron' => TvPowerState.on,
+      'displayoff' || 'ready' || 'suspend' || 'headless' => TvPowerState.off,
+      null || '' => TvPowerState.unknown,
+      _ => rawPower.contains('off') ? TvPowerState.off : TvPowerState.unknown,
+    };
+
+    if (powerState == TvPowerState.off) {
+      return const TvStatus(powerState: TvPowerState.off);
+    }
+
+    final appMatch = RegExp(
+      r'<(?:app|screensaver)\b[^>]*>(.*?)</(?:app|screensaver)>',
+      caseSensitive: false,
+      dotAll: true,
+    ).firstMatch(activeApp);
+    var title = appMatch?.group(1)?.trim();
+    if (title != null && title.isNotEmpty) {
+      title = _decodeXmlStatic(title);
+      if (title.toLowerCase() == 'roku') {
+        title = 'Home';
+      }
+    } else {
+      title = null;
+    }
+
+    return TvStatus(powerState: powerState, currentApp: title);
+  }
+
+  @override
   Future<List<TvAppInfo>> getApps() async {
     if (_apps != null) {
       return _apps!;
@@ -169,6 +239,10 @@ class RokuController implements TvRemoteController {
   }
 
   String _decodeXml(String value) {
+    return _decodeXmlStatic(value);
+  }
+
+  static String _decodeXmlStatic(String value) {
     return value
         .replaceAll('&amp;', '&')
         .replaceAll('&lt;', '<')

@@ -26,8 +26,9 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     SharedPreferences.setMockInitialValues({
-      'tv_remote.devices': '[{"id":"living-room","name":"Living Room","brand":"roku",'
-          '"host":"127.0.0.1","port":8060,"model":"Test TV"}]',
+      'tv_remote.devices':
+          '[{"id":"living-room","name":"Living Room","brand":"roku",'
+              '"host":"127.0.0.1","port":8060,"model":"Test TV"}]',
       'tv_remote.selected_device': 'living-room',
     });
 
@@ -43,6 +44,9 @@ void main() {
     expect(find.text('Menu'), findsOneWidget);
     expect(find.text('Play / Pause'), findsOneWidget);
     expect(find.text('Mute'), findsOneWidget);
+    expect(find.byKey(const Key('tv-status-panel')), findsOneWidget);
+    expect(find.byKey(const Key('tv-power-status')), findsOneWidget);
+    expect(find.byKey(const Key('tv-current-app')), findsOneWidget);
 
     final dpadBounds = tester.getRect(
       find.byKey(const Key('remote-dpad')),

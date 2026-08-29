@@ -106,6 +106,33 @@ class VizioAppCatalog {
     return legacyFavorite == null ? null : _legacyFallbacks[legacyFavorite];
   }
 
+  Future<String?> titleForConfig(VizioAppConfig current) async {
+    for (final entry in _legacyFallbacks.entries) {
+      if (entry.value.appId == current.appId) {
+        return entry.key.label;
+      }
+    }
+
+    try {
+      await _load();
+      for (final item in _catalog!.whereType<Map>()) {
+        final map = Map<String, dynamic>.from(item);
+        final catalogId = _coerceId(map['id']);
+        if (catalogId == null) {
+          continue;
+        }
+        final config = _configForCatalogId(catalogId);
+        if (config?.appId == current.appId) {
+          return map['name']?.toString().trim();
+        }
+      }
+    } catch (_) {
+      // Fall through to the offline mappings below.
+    }
+
+    return null;
+  }
+
   bool _matchesTitle(String catalogTitle, String requestedTitle) {
     final target = requestedTitle.toLowerCase();
     if (target == 'mlb') {

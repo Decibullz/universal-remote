@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:universal_tv_remote/controllers/tv_remote_controller.dart';
 import 'package:universal_tv_remote/models/tv_app_info.dart';
 import 'package:universal_tv_remote/models/tv_device.dart';
 import 'package:universal_tv_remote/models/tv_input_info.dart';
+import 'package:universal_tv_remote/models/tv_status.dart';
 import 'package:universal_tv_remote/screens/add_device_screen.dart';
 import 'package:universal_tv_remote/services/controller_factory.dart';
 import 'package:universal_tv_remote/services/credential_store.dart';
@@ -36,6 +39,10 @@ class _RemoteScreenState extends State<RemoteScreen> {
   TvRemoteController? _controller;
   RemoteConnectionState _connectionState = RemoteConnectionState.idle;
   String? _connectionError;
+  TvStatus? _tvStatus;
+  Timer? _statusTimer;
+  bool _statusRefreshing = false;
+  int _statusGeneration = 0;
 
   @override
   void initState() {
@@ -45,6 +52,7 @@ class _RemoteScreenState extends State<RemoteScreen> {
 
   @override
   void dispose() {
+    _stopStatusPolling();
     _controller?.disconnect();
     super.dispose();
   }
@@ -88,9 +96,11 @@ class _RemoteScreenState extends State<RemoteScreen> {
   }
 
   Future<void> _connect(TvDevice device) async {
+    _stopStatusPolling();
     setState(() {
       _connectionState = RemoteConnectionState.connecting;
       _connectionError = null;
+      _tvStatus = null;
     });
 
     await _controller?.disconnect();
@@ -103,6 +113,7 @@ class _RemoteScreenState extends State<RemoteScreen> {
         return;
       }
       setState(() => _connectionState = RemoteConnectionState.connected);
+      _startStatusPolling();
     } catch (error) {
       if (!mounted || _controller != controller) {
         return;
@@ -110,7 +121,68 @@ class _RemoteScreenState extends State<RemoteScreen> {
       setState(() {
         _connectionState = RemoteConnectionState.error;
         _connectionError = error.toString();
+        _tvStatus = const TvStatus(powerState: TvPowerState.unknown);
       });
+    }
+  }
+
+  void _startStatusPolling() {
+    _statusTimer?.cancel();
+    _statusGeneration++;
+    _statusRefreshing = false;
+    unawaited(_refreshStatus());
+    _statusTimer = Timer.periodic(
+      const Duration(seconds: 8),
+      (_) => unawaited(_refreshStatus()),
+    );
+  }
+
+  void _stopStatusPolling() {
+    _statusTimer?.cancel();
+    _statusTimer = null;
+    _statusGeneration++;
+    _statusRefreshing = false;
+  }
+
+  Future<void> _refreshStatus() async {
+    final controller = _controller;
+    final generation = _statusGeneration;
+    if (controller == null ||
+        _connectionState != RemoteConnectionState.connected ||
+        _statusRefreshing) {
+      return;
+    }
+
+    if (mounted) {
+      setState(() => _statusRefreshing = true);
+    }
+
+    try {
+      final status = await controller.getStatus();
+      if (!mounted ||
+          generation != _statusGeneration ||
+          controller != _controller) {
+        return;
+      }
+      setState(() => _tvStatus = status);
+    } catch (_) {
+      if (!mounted ||
+          generation != _statusGeneration ||
+          controller != _controller) {
+        return;
+      }
+      setState(() {
+        _tvStatus = TvStatus(
+          powerState:
+              controller.isConnected ? TvPowerState.unknown : TvPowerState.off,
+        );
+      });
+    } finally {
+      if (mounted &&
+          generation == _statusGeneration &&
+          controller == _controller) {
+        setState(() => _statusRefreshing = false);
+      }
     }
   }
 
@@ -274,6 +346,7 @@ class _RemoteScreenState extends State<RemoteScreen> {
 
     final deletingSelected = _selected?.id == device.id;
     if (deletingSelected) {
+      _stopStatusPolling();
       await _controller?.disconnect();
       _controller = null;
     }
@@ -445,6 +518,14 @@ class _RemoteScreenState extends State<RemoteScreen> {
           onManage: _showManageDevices,
           onPower: connected ? () => _confirmPowerOff(selected) : null,
         ),
+        const SizedBox(height: 10),
+        _TvStatusPanel(
+          status: _tvStatus,
+          connected: connected,
+          checking: _connectionState == RemoteConnectionState.connecting ||
+              _statusRefreshing,
+          onRefresh: connected && !_statusRefreshing ? _refreshStatus : null,
+        ),
         if (_connectionState == RemoteConnectionState.error) ...[
           const SizedBox(height: 10),
           _ConnectionNotice(
@@ -452,7 +533,7 @@ class _RemoteScreenState extends State<RemoteScreen> {
             onReconnect: () => _connect(selected),
           ),
         ],
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         Row(
           children: [
             Text(
@@ -479,6 +560,7 @@ class _RemoteScreenState extends State<RemoteScreen> {
                   onPressed: connected
                       ? () => _run(
                             () => _controller!.launchApp(favorites[index]),
+                            refreshStatus: true,
                           )
                       : null,
                   onLongPress:
@@ -520,7 +602,9 @@ class _RemoteScreenState extends State<RemoteScreen> {
                 label: 'Back',
                 vertical: true,
                 height: 64,
-                onPressed: connected ? () => _run(_controller!.back) : null,
+                onPressed: connected
+                    ? () => _run(_controller!.back, refreshStatus: true)
+                    : null,
               ),
             ),
             const SizedBox(width: 9),
@@ -530,7 +614,9 @@ class _RemoteScreenState extends State<RemoteScreen> {
                 label: 'Home',
                 vertical: true,
                 height: 64,
-                onPressed: connected ? () => _run(_controller!.home) : null,
+                onPressed: connected
+                    ? () => _run(_controller!.home, refreshStatus: true)
+                    : null,
               ),
             ),
             const SizedBox(width: 9),
@@ -609,9 +695,16 @@ class _RemoteScreenState extends State<RemoteScreen> {
     );
   }
 
-  Future<void> _run(Future<void> Function() action) async {
+  Future<void> _run(
+    Future<void> Function() action, {
+    bool refreshStatus = false,
+  }) async {
     try {
       await action();
+      if (refreshStatus) {
+        await Future<void>.delayed(const Duration(milliseconds: 700));
+        await _refreshStatus();
+      }
     } catch (error) {
       if (!mounted) {
         return;
@@ -679,7 +772,10 @@ class _RemoteScreenState extends State<RemoteScreen> {
       ),
     );
     if (input != null) {
-      await _run(() => controller.switchInput(input));
+      await _run(
+        () => controller.switchInput(input),
+        refreshStatus: true,
+      );
     }
   }
 
@@ -720,7 +816,7 @@ class _RemoteScreenState extends State<RemoteScreen> {
     );
 
     if (confirmed == true) {
-      await _run(_controller!.powerOff);
+      await _run(_controller!.powerOff, refreshStatus: true);
     }
   }
 
@@ -1055,6 +1151,137 @@ class _HeaderIconButton extends StatelessWidget {
               child: Icon(icon, size: 22, color: foreground),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TvStatusPanel extends StatelessWidget {
+  const _TvStatusPanel({
+    required this.status,
+    required this.connected,
+    required this.checking,
+    required this.onRefresh,
+  });
+
+  final TvStatus? status;
+  final bool connected;
+  final bool checking;
+  final VoidCallback? onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final powerState = status?.powerState ?? TvPowerState.unknown;
+    final (powerLabel, powerColor) = switch (powerState) {
+      TvPowerState.on => ('Power On', const Color(0xFF35C779)),
+      TvPowerState.off => ('Power Off', colors.error),
+      TvPowerState.unknown when checking => ('Checking…', colors.tertiary),
+      TvPowerState.unknown when !connected => ('Unavailable', colors.outline),
+      TvPowerState.unknown => ('Power Unknown', colors.outline),
+    };
+    final appLabel = switch ((powerState, status?.currentApp)) {
+      (_, final String app) when app.trim().isNotEmpty => app,
+      (TvPowerState.off, _) => 'No app running',
+      (_, _) when checking => 'Checking current app…',
+      _ => 'Current app unavailable',
+    };
+
+    return Material(
+      key: const Key('tv-status-panel'),
+      color: colors.surfaceContainerHigh.withValues(alpha: 0.82),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: colors.outlineVariant.withValues(alpha: 0.45),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Text(
+                  'TV Status',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: colors.onSurfaceVariant,
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+                const Spacer(),
+                if (checking)
+                  const Padding(
+                    padding: EdgeInsets.only(right: 8),
+                    child: SizedBox.square(
+                      dimension: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                else
+                  IconButton(
+                    tooltip: 'Refresh TV status',
+                    onPressed: onRefresh,
+                    visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints.tightFor(
+                      width: 32,
+                      height: 28,
+                    ),
+                    padding: EdgeInsets.zero,
+                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Row(
+              children: [
+                Container(
+                  width: 9,
+                  height: 9,
+                  decoration: BoxDecoration(
+                    color: powerColor,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 7),
+                Text(
+                  powerLabel,
+                  key: const Key('tv-power-status'),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const SizedBox(width: 12),
+                SizedBox(
+                  height: 18,
+                  child: VerticalDivider(
+                    width: 1,
+                    color: colors.outlineVariant,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Icon(
+                  Icons.apps_rounded,
+                  size: 17,
+                  color: colors.onSurfaceVariant,
+                ),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    appLabel,
+                    key: const Key('tv-current-app'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );

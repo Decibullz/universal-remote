@@ -1,6 +1,7 @@
 import 'package:universal_tv_remote/models/tv_app_info.dart';
 import 'package:universal_tv_remote/models/tv_favorite.dart';
 import 'package:universal_tv_remote/models/tv_input_info.dart';
+import 'package:universal_tv_remote/models/tv_status.dart';
 
 abstract interface class TvRemoteController {
   bool get isConnected;
@@ -31,6 +32,8 @@ abstract interface class TvRemoteController {
   Future<void> sendText(String text);
   Future<void> backspace();
   Future<void> enter();
+
+  Future<TvStatus> getStatus();
 
   Future<List<TvAppInfo>> getApps();
   Future<void> launchApp(TvAppInfo app);

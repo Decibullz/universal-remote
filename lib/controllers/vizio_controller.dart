@@ -3,6 +3,7 @@ import 'package:universal_tv_remote/models/tv_app_info.dart';
 import 'package:universal_tv_remote/models/tv_device.dart';
 import 'package:universal_tv_remote/models/tv_favorite.dart';
 import 'package:universal_tv_remote/models/tv_input_info.dart';
+import 'package:universal_tv_remote/models/tv_status.dart';
 import 'package:universal_tv_remote/services/credential_store.dart';
 import 'package:universal_tv_remote/services/io_http.dart';
 import 'package:universal_tv_remote/services/vizio_app_catalog.dart';
@@ -291,6 +292,82 @@ class VizioController implements TvRemoteController {
 
   @override
   Future<void> enter() => _key(0, 13);
+
+  @override
+  Future<TvStatus> getStatus() async {
+    Map<String, dynamic>? powerResponse;
+    try {
+      powerResponse = await _request('/state/device/power_mode');
+    } catch (_) {
+      return const TvStatus(powerState: TvPowerState.off);
+    }
+
+    final powerState = powerStateFromResponse(powerResponse);
+    if (powerState != TvPowerState.on) {
+      return TvStatus(powerState: powerState);
+    }
+
+    String? currentApp;
+    try {
+      final response = await _request('/app/current');
+      final value = response?['ITEM'];
+      final item = value is Map ? value['VALUE'] : null;
+      if (item is Map) {
+        final appId = item['APP_ID']?.toString();
+        final nameSpace = int.tryParse(item['NAME_SPACE'].toString());
+        if (appId != null &&
+            appId.isNotEmpty &&
+            appId != '0' &&
+            nameSpace != null) {
+          currentApp = await _catalog.titleForConfig(
+            VizioAppConfig(
+              appId: appId,
+              nameSpace: nameSpace,
+              message: item['MESSAGE']?.toString(),
+            ),
+          );
+        }
+      }
+    } catch (_) {
+      // Fall back to the current input below.
+    }
+
+    currentApp ??= await _currentInputTitle();
+    return TvStatus(powerState: powerState, currentApp: currentApp);
+  }
+
+  static TvPowerState powerStateFromResponse(
+    Map<String, dynamic>? response,
+  ) {
+    final items = response?['ITEMS'];
+    final first = items is List && items.isNotEmpty ? items.first : null;
+    final raw = first is Map ? first['VALUE'] : null;
+    if (raw is bool) {
+      return raw ? TvPowerState.on : TvPowerState.off;
+    }
+    final value = int.tryParse(raw?.toString() ?? '');
+    if (value == null) {
+      return TvPowerState.unknown;
+    }
+    return value == 0 ? TvPowerState.off : TvPowerState.on;
+  }
+
+  Future<String?> _currentInputTitle() async {
+    try {
+      final response = await _request(
+        '/menu_native/dynamic/tv_settings/devices/current_input',
+      );
+      final items = response?['ITEMS'];
+      final first = items is List && items.isNotEmpty ? items.first : null;
+      final value = first is Map ? first['VALUE']?.toString().trim() : null;
+      if (value == null || value.isEmpty) {
+        return null;
+      }
+      return value.toUpperCase() == 'SMARTCAST' ? 'SmartCast Home' : value;
+    } catch (_) {
+      return null;
+    }
+  }
 
   @override
   Future<List<TvAppInfo>> getApps() async {
