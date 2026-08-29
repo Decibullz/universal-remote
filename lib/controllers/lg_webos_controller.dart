@@ -202,8 +202,7 @@ class LgWebOsController implements TvRemoteController {
       ),
     );
 
-    final clientKey = (response['payload']
-        as Map<String, dynamic>?)?['client-key'] as String?;
+    final clientKey = (response['payload'] as Map<String, dynamic>?)?['client-key'] as String?;
 
     if (clientKey == null || clientKey.isEmpty) {
       throw const TvRemoteException('LG pairing did not return a client key.');
@@ -223,8 +222,7 @@ class LgWebOsController implements TvRemoteController {
     }
 
     // Some webOS versions omit the request ID from their hello response.
-    final id = decoded['id']?.toString() ??
-        (decoded['type'] == 'hello' ? 'hello' : null);
+    final id = decoded['id']?.toString() ?? (decoded['type'] == 'hello' ? 'hello' : null);
     if (id == 'register_0') {
       final type = decoded['type']?.toString();
       if (type == 'registered') {
@@ -377,15 +375,19 @@ class LgWebOsController implements TvRemoteController {
       return const [];
     }
 
-    return devices.whereType<Map>().map((item) {
-      final map = Map<String, dynamic>.from(item);
-      final id = (map['inputId'] ?? map['id'])?.toString();
-      final label = (map['label'] ?? map['name'] ?? id)?.toString();
-      if (id == null || id.isEmpty || label == null || label.isEmpty) {
-        return null;
-      }
-      return TvInputInfo(id: id, title: label);
-    }).whereType<TvInputInfo>().toList(growable: false);
+    return devices
+        .whereType<Map>()
+        .map((item) {
+          final map = Map<String, dynamic>.from(item);
+          final id = (map['inputId'] ?? map['id'])?.toString();
+          final label = (map['label'] ?? map['name'] ?? id)?.toString();
+          if (id == null || id.isEmpty || label == null || label.isEmpty) {
+            return null;
+          }
+          return TvInputInfo(id: id, title: label);
+        })
+        .whereType<TvInputInfo>()
+        .toList(growable: false);
   }
 
   @override
@@ -494,9 +496,7 @@ class LgWebOsController implements TvRemoteController {
       );
       powerState = powerStateFromPayload(power);
     } catch (_) {
-      powerState = isConnected || _requestHandler != null
-          ? TvPowerState.on
-          : TvPowerState.off;
+      powerState = isConnected || _requestHandler != null ? TvPowerState.on : TvPowerState.off;
     }
 
     if (powerState == TvPowerState.off) {
@@ -527,18 +527,10 @@ class LgWebOsController implements TvRemoteController {
   }
 
   static TvPowerState powerStateFromPayload(Map<String, dynamic> payload) {
-    final value = (payload['state'] ?? payload['powerState'])
-        ?.toString()
-        .toLowerCase()
-        .replaceAll(RegExp('[^a-z]'), '');
+    final value = (payload['state'] ?? payload['powerState'])?.toString().toLowerCase().replaceAll(RegExp('[^a-z]'), '');
     return switch (value) {
       'active' || 'on' || 'poweron' => TvPowerState.on,
-      'screenoff' ||
-      'suspend' ||
-      'activestandby' ||
-      'off' ||
-      'poweroff' =>
-        TvPowerState.off,
+      'screenoff' || 'suspend' || 'activestandby' || 'off' || 'poweroff' => TvPowerState.off,
       _ => TvPowerState.unknown,
     };
   }

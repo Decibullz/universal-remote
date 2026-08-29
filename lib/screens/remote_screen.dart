@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,6 +14,7 @@ import 'package:universal_tv_remote/services/credential_store.dart';
 import 'package:universal_tv_remote/services/device_store.dart';
 import 'package:universal_tv_remote/services/favorite_store.dart';
 import 'package:universal_tv_remote/widgets/dpad.dart';
+import 'package:universal_tv_remote/widgets/editable_favorites_row.dart';
 import 'package:universal_tv_remote/widgets/favorite_app_button.dart';
 import 'package:universal_tv_remote/widgets/favorite_picker_sheet.dart';
 import 'package:universal_tv_remote/widgets/hold_repeat_button.dart';
@@ -44,6 +46,8 @@ class _RemoteScreenState extends State<RemoteScreen> {
   Timer? _statusTimer;
   bool _statusRefreshing = false;
   int _statusGeneration = 0;
+  bool _editingFavorites = false;
+  Future<void> _favoriteSaveQueue = Future<void>.value();
 
   @override
   void initState() {
@@ -192,7 +196,10 @@ class _RemoteScreenState extends State<RemoteScreen> {
       return;
     }
 
-    setState(() => _selected = device);
+    setState(() {
+      _selected = device;
+      _editingFavorites = false;
+    });
     await DeviceStore.instance.setSelectedDeviceId(device.id);
     await _connect(device);
   }
@@ -248,6 +255,7 @@ class _RemoteScreenState extends State<RemoteScreen> {
     setState(() {
       _devices = devices;
       _selected = selected;
+      _editingFavorites = false;
       _favoritesByDevice = {
         ..._favoritesByDevice,
         ...Map.fromEntries(favoriteEntries),
@@ -375,6 +383,7 @@ class _RemoteScreenState extends State<RemoteScreen> {
       if (deletingSelected) {
         _selected = next;
         _connectionState = RemoteConnectionState.idle;
+        _editingFavorites = false;
       }
     });
 
@@ -444,59 +453,35 @@ class _RemoteScreenState extends State<RemoteScreen> {
             stops: const [0, 0.34, 1],
           ),
         ),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final top = _buildTopControls(
-              context,
-              selected: selected,
-              connected: connected,
-              favorites: favorites,
-            );
-            final dpad = _buildDpad(connected);
-            final bottom = _buildBottomControls(
-              selected: selected,
-              connected: connected,
-            );
+        child: SafeArea(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final horizontalInset = constraints.maxWidth * 0.04;
+              final top = _buildTopControls(
+                context,
+                selected: selected,
+                connected: connected,
+                favorites: favorites,
+              );
+              final dpad = _buildDpad(connected);
+              final bottom = _buildBottomControls(
+                selected: selected,
+                connected: connected,
+              );
 
-            if (constraints.maxHeight < 800) {
-              return SafeArea(
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+              return Padding(
+                padding: EdgeInsets.symmetric(horizontal: horizontalInset),
+                child: CustomMultiChildLayout(
+                  delegate: _RemoteLayoutDelegate(),
                   children: [
-                    top,
-                    const SizedBox(height: 22),
-                    Center(child: dpad),
-                    const SizedBox(height: 24),
-                    bottom,
+                    LayoutId(id: _RemoteLayoutId.top, child: top),
+                    LayoutId(id: _RemoteLayoutId.dpad, child: dpad),
+                    LayoutId(id: _RemoteLayoutId.bottom, child: bottom),
                   ],
                 ),
               );
-            }
-
-            return Stack(
-              children: [
-                Center(child: dpad),
-                SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                    child: Align(
-                      alignment: Alignment.topCenter,
-                      child: SizedBox(width: double.infinity, child: top),
-                    ),
-                  ),
-                ),
-                SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-                    child: Align(
-                      alignment: Alignment.bottomCenter,
-                      child: SizedBox(width: double.infinity, child: bottom),
-                    ),
-                  ),
-                ),
-              ],
-            );
-          },
+            },
+          ),
         ),
       ),
     );
@@ -513,6 +498,7 @@ class _RemoteScreenState extends State<RemoteScreen> {
     final canUsePower = _connectionState != RemoteConnectionState.connecting;
 
     return Column(
+      key: const Key('remote-top-controls'),
       mainAxisSize: MainAxisSize.min,
       children: [
         _RemoteHeader(
@@ -552,34 +538,47 @@ class _RemoteScreenState extends State<RemoteScreen> {
                   ),
             ),
             const Spacer(),
+            if (_editingFavorites && favorites.length < 4)
+              TextButton.icon(
+                onPressed: connected ? () => _editFavorites(selected) : null,
+                icon: const Icon(Icons.add_rounded, size: 17),
+                label: const Text('Add'),
+              ),
             TextButton.icon(
-              onPressed: connected ? () => _editFavorites(selected) : null,
-              icon: const Icon(Icons.edit_rounded, size: 17),
-              label: const Text('Edit'),
+              onPressed: _editingFavorites
+                  ? () => setState(() => _editingFavorites = false)
+                  : connected
+                      ? () => _editFavorites(selected)
+                      : null,
+              icon: Icon(
+                _editingFavorites ? Icons.check_rounded : Icons.edit_rounded,
+                size: 17,
+              ),
+              label: Text(_editingFavorites ? 'Done' : 'Edit'),
             ),
           ],
         ),
         const SizedBox(height: 4),
-        Row(
-          children: [
-            for (var index = 0; index < favorites.length; index++) ...[
-              Expanded(
-                child: FavoriteAppButton(
-                  app: favorites[index],
-                  onPressed: connected
-                      ? () => _run(
-                            () => _controller!.launchApp(favorites[index]),
-                            refreshStatus: true,
-                          )
-                      : null,
-                  onLongPress:
-                      connected ? () => _editFavorites(selected) : null,
-                ),
-              ),
-              if (index != favorites.length - 1) const SizedBox(width: 8),
-            ],
-          ],
-        ),
+        if (_editingFavorites)
+          EditableFavoritesRow(
+            favorites: favorites,
+            onChanged: (updated) => _updateFavoriteLayout(selected, updated),
+          )
+        else
+          _FavoritesDisplayRow(
+            favorites: favorites,
+            connected: connected,
+            onLaunch: (app) => _run(
+              () => _controller!.launchApp(app),
+              refreshStatus: true,
+            ),
+            onLongPress: favorites.isEmpty
+                ? null
+                : () {
+                    HapticFeedback.mediumImpact();
+                    setState(() => _editingFavorites = true);
+                  },
+          ),
       ],
     );
   }
@@ -746,20 +745,32 @@ class _RemoteScreenState extends State<RemoteScreen> {
       ),
     );
 
-    if (updated == null) {
+    if (updated == null || !mounted) {
       return;
     }
 
-    await FavoriteStore.instance.save(device.id, updated);
-    if (!mounted) {
-      return;
-    }
+    _updateFavoriteLayout(device, updated);
+  }
 
+  void _updateFavoriteLayout(TvDevice device, List<TvAppInfo> updated) {
+    final saved = List<TvAppInfo>.unmodifiable(updated.take(4));
     setState(() {
       _favoritesByDevice = {
         ..._favoritesByDevice,
-        device.id: List.unmodifiable(updated),
+        device.id: saved,
       };
+    });
+
+    _favoriteSaveQueue = _favoriteSaveQueue.then((_) async {
+      try {
+        await FavoriteStore.instance.save(device.id, saved);
+      } catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not save favorites: $error')),
+          );
+        }
+      }
     });
   }
 
@@ -1244,102 +1255,203 @@ class _TvStatusPanel extends StatelessWidget {
       _ => 'Current app unavailable',
     };
 
-    return SizedBox(
+    return Material(
       key: const Key('tv-status-panel'),
-      height: 64,
-      child: Material(
-        color: colors.surfaceContainerHigh.withValues(alpha: 0.82),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(
-            color: colors.outlineVariant.withValues(alpha: 0.45),
-          ),
+      color: colors.surfaceContainerHigh.withValues(alpha: 0.82),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: colors.outlineVariant.withValues(alpha: 0.45),
         ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Text(
-                    'TV Status',
-                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                          color: colors.onSurfaceVariant,
-                          fontWeight: FontWeight.w800,
-                        ),
-                  ),
-                  const Spacer(),
-                  SizedBox(
-                    width: 32,
-                    height: 28,
-                    child: checking
-                        ? const Center(
-                            child: SizedBox.square(
-                              dimension: 14,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                          )
-                        : IconButton(
-                            tooltip: 'Refresh TV status',
-                            onPressed: onRefresh,
-                            visualDensity: VisualDensity.compact,
-                            constraints: const BoxConstraints.expand(),
-                            padding: EdgeInsets.zero,
-                            icon: const Icon(Icons.refresh_rounded, size: 18),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Text(
+                  'TV Status',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: colors.onSurfaceVariant,
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+                const Spacer(),
+                SizedBox(
+                  width: 32,
+                  height: 28,
+                  child: checking
+                      ? const Center(
+                          child: SizedBox.square(
+                            dimension: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
                           ),
+                        )
+                      : IconButton(
+                          tooltip: 'Refresh TV status',
+                          onPressed: onRefresh,
+                          visualDensity: VisualDensity.compact,
+                          constraints: const BoxConstraints.expand(),
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(Icons.refresh_rounded, size: 18),
+                        ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Row(
+              children: [
+                Container(
+                  width: 9,
+                  height: 9,
+                  decoration: BoxDecoration(
+                    color: powerColor,
+                    shape: BoxShape.circle,
                   ),
-                ],
-              ),
-              const SizedBox(height: 2),
-              Row(
-                children: [
-                  Container(
-                    width: 9,
-                    height: 9,
-                    decoration: BoxDecoration(
-                      color: powerColor,
-                      shape: BoxShape.circle,
-                    ),
+                ),
+                const SizedBox(width: 7),
+                Text(
+                  powerLabel,
+                  key: const Key('tv-power-status'),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const SizedBox(width: 12),
+                SizedBox(
+                  height: 18,
+                  child: VerticalDivider(
+                    width: 1,
+                    color: colors.outlineVariant,
                   ),
-                  const SizedBox(width: 7),
-                  Text(
-                    powerLabel,
-                    key: const Key('tv-power-status'),
+                ),
+                const SizedBox(width: 12),
+                Icon(
+                  Icons.apps_rounded,
+                  size: 17,
+                  color: colors.onSurfaceVariant,
+                ),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    appLabel,
+                    key: const Key('tv-current-app'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w600,
                         ),
                   ),
-                  const SizedBox(width: 12),
-                  SizedBox(
-                    height: 18,
-                    child: VerticalDivider(
-                      width: 1,
-                      color: colors.outlineVariant,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Icon(
-                    Icons.apps_rounded,
-                    size: 17,
-                    color: colors.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: 7),
-                  Expanded(
-                    child: Text(
-                      appLabel,
-                      key: const Key('tv-current-app'),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+enum _RemoteLayoutId { top, dpad, bottom }
+
+class _RemoteLayoutDelegate extends MultiChildLayoutDelegate {
+  @override
+  void performLayout(Size size) {
+    final topSize = layoutChild(
+      _RemoteLayoutId.top,
+      BoxConstraints.tightFor(width: size.width),
+    );
+    final bottomSize = layoutChild(
+      _RemoteLayoutId.bottom,
+      BoxConstraints.tightFor(width: size.width),
+    );
+
+    final edgeInset = size.height * 0.006;
+    final sectionGap = size.height * 0.02;
+    final bottomTop = size.height - edgeInset - bottomSize.height;
+    final availableTop = edgeInset + topSize.height + sectionGap;
+    final availableBottom = bottomTop - sectionGap;
+    final availableHeight = math.max(0.0, availableBottom - availableTop);
+    final dpadSide = math.min(size.width * 0.72, availableHeight);
+
+    layoutChild(
+      _RemoteLayoutId.dpad,
+      BoxConstraints.tight(Size.square(dpadSide)),
+    );
+
+    final centeredTop = (size.height - dpadSide) / 2;
+    final latestTop = availableBottom - dpadSide;
+    final dpadTop = availableHeight == 0
+        ? availableTop
+        : centeredTop.clamp(availableTop, latestTop).toDouble();
+
+    positionChild(_RemoteLayoutId.top, Offset(0, edgeInset));
+    positionChild(
+      _RemoteLayoutId.dpad,
+      Offset((size.width - dpadSide) / 2, dpadTop),
+    );
+    positionChild(_RemoteLayoutId.bottom, Offset(0, bottomTop));
+  }
+
+  @override
+  bool shouldRelayout(_RemoteLayoutDelegate oldDelegate) => false;
+}
+
+class _FavoritesDisplayRow extends StatelessWidget {
+  const _FavoritesDisplayRow({
+    required this.favorites,
+    required this.connected,
+    required this.onLaunch,
+    required this.onLongPress,
+  });
+
+  final List<TvAppInfo> favorites;
+  final bool connected;
+  final ValueChanged<TvAppInfo> onLaunch;
+  final VoidCallback? onLongPress;
+
+  @override
+  Widget build(BuildContext context) {
+    if (favorites.isEmpty) {
+      return SizedBox(
+        height: 64,
+        child: Center(
+          child: Text(
+            'No favorites selected',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
           ),
         ),
+      );
+    }
+
+    return SizedBox(
+      height: 64,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final spacing = constraints.maxWidth * 0.02;
+          final slotWidth = (constraints.maxWidth - (spacing * 3)) / 4;
+          return Row(
+            children: [
+              for (var index = 0; index < favorites.length; index++) ...[
+                SizedBox(
+                  width: slotWidth,
+                  child: FavoriteAppButton(
+                    key: Key('favorite-app-${favorites[index].id}'),
+                    app: favorites[index],
+                    onPressed:
+                        connected ? () => onLaunch(favorites[index]) : null,
+                    onLongPress: onLongPress,
+                  ),
+                ),
+                if (index != favorites.length - 1) SizedBox(width: spacing),
+              ],
+            ],
+          );
+        },
       ),
     );
   }

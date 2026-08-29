@@ -81,6 +81,14 @@ class _FavoritePickerSheetState extends State<FavoritePickerSheet> {
     return _selected.any((selected) => selected.id == app.id);
   }
 
+  List<TvAppInfo> _selectedFirst(List<TvAppInfo> apps) {
+    final selectedIds = _selected.map((app) => app.id).toSet();
+    return [
+      ..._selected,
+      ...apps.where((app) => !selectedIds.contains(app.id)),
+    ];
+  }
+
   void _toggle(TvAppInfo app) {
     setState(() {
       if (_isSelected(app)) {
@@ -127,7 +135,7 @@ class _FavoritePickerSheetState extends State<FavoritePickerSheet> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'Choose four apps for ${widget.deviceName}.',
+                          'Choose up to four apps for ${widget.deviceName}.',
                           style:
                               Theme.of(context).textTheme.bodySmall?.copyWith(
                                     color: colors.onSurfaceVariant,
@@ -181,7 +189,7 @@ class _FavoritePickerSheetState extends State<FavoritePickerSheet> {
                       );
                     }
 
-                    final apps = snapshot.data ?? const [];
+                    final apps = _selectedFirst(snapshot.data ?? const []);
                     final visible = _query.isEmpty
                         ? apps
                         : apps
@@ -232,9 +240,7 @@ class _FavoritePickerSheetState extends State<FavoritePickerSheet> {
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
-                  onPressed: _selected.length == 4
-                      ? () => Navigator.of(context).pop(_selected)
-                      : null,
+                  onPressed: () => Navigator.of(context).pop(_selected),
                   icon: const Icon(Icons.check_rounded),
                   label: const Text('Save favorites'),
                 ),

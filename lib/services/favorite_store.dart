@@ -36,18 +36,18 @@ class FavoriteStore {
           .where((app) => app.id.isNotEmpty && app.title.isNotEmpty)
           .take(4)
           .toList(growable: false);
-      return favorites.length == 4 ? favorites : defaultFavorites;
+      return List.unmodifiable(favorites);
     } catch (_) {
       return defaultFavorites;
     }
   }
 
   Future<void> save(String deviceId, List<TvAppInfo> favorites) async {
-    if (favorites.length != 4) {
+    if (favorites.length > 4) {
       throw ArgumentError.value(
         favorites.length,
         'favorites',
-        'Exactly four favorites are required.',
+        'No more than four favorites are allowed.',
       );
     }
 

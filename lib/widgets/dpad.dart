@@ -29,88 +29,91 @@ class Dpad extends StatelessWidget {
         onRight != null ||
         onSelect != null;
 
-    return AnimatedOpacity(
-      duration: const Duration(milliseconds: 180),
-      opacity: enabled ? 1 : 0.48,
-      child: SizedBox.square(
-        dimension: size,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: SweepGradient(
-              transform: const GradientRotation(math.pi / 4),
-              colors: [
-                colors.surfaceContainerHigh,
-                colors.surfaceContainerLowest,
-                colors.surfaceContainerHigh,
-                colors.surfaceContainerLowest,
-                colors.surfaceContainerHigh,
+    return FittedBox(
+      fit: BoxFit.contain,
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 180),
+        opacity: enabled ? 1 : 0.48,
+        child: SizedBox.square(
+          dimension: size,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: SweepGradient(
+                transform: const GradientRotation(math.pi / 4),
+                colors: [
+                  colors.surfaceContainerHigh,
+                  colors.surfaceContainerLowest,
+                  colors.surfaceContainerHigh,
+                  colors.surfaceContainerLowest,
+                  colors.surfaceContainerHigh,
+                ],
+              ),
+              border: Border.all(
+                color: colors.outlineVariant.withValues(alpha: 0.55),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: colors.shadow.withValues(alpha: 0.18),
+                  blurRadius: 32,
+                  offset: const Offset(0, 16),
+                ),
+                BoxShadow(
+                  color: colors.onSurface.withValues(alpha: 0.04),
+                  blurRadius: 1,
+                  offset: const Offset(0, 1),
+                ),
               ],
             ),
-            border: Border.all(
-              color: colors.outlineVariant.withValues(alpha: 0.55),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: colors.shadow.withValues(alpha: 0.18),
-                blurRadius: 32,
-                offset: const Offset(0, 16),
-              ),
-              BoxShadow(
-                color: colors.onSurface.withValues(alpha: 0.04),
-                blurRadius: 1,
-                offset: const Offset(0, 1),
-              ),
-            ],
-          ),
-          child: Material(
-            type: MaterialType.transparency,
-            shape: const CircleBorder(),
-            clipBehavior: Clip.antiAlias,
-            child: CustomPaint(
-              painter: _DpadDividerPainter(
-                color: colors.outlineVariant.withValues(alpha: 0.35),
-              ),
-              child: Stack(
-                children: [
-                  Positioned(
-                    left: 78,
-                    top: 4,
-                    child: _DirectionControl(
-                      icon: Icons.keyboard_arrow_up_rounded,
-                      label: 'Up',
-                      onPressed: onUp,
+            child: Material(
+              type: MaterialType.transparency,
+              shape: const CircleBorder(),
+              clipBehavior: Clip.antiAlias,
+              child: CustomPaint(
+                painter: _DpadDividerPainter(
+                  color: colors.outlineVariant.withValues(alpha: 0.35),
+                ),
+                child: Stack(
+                  children: [
+                    Positioned(
+                      left: 78,
+                      top: 4,
+                      child: _DirectionControl(
+                        icon: Icons.keyboard_arrow_up_rounded,
+                        label: 'Up',
+                        onPressed: onUp,
+                      ),
                     ),
-                  ),
-                  Positioned(
-                    right: 3,
-                    top: 83,
-                    child: _DirectionControl(
-                      icon: Icons.keyboard_arrow_right_rounded,
-                      label: 'Right',
-                      onPressed: onRight,
+                    Positioned(
+                      right: 3,
+                      top: 83,
+                      child: _DirectionControl(
+                        icon: Icons.keyboard_arrow_right_rounded,
+                        label: 'Right',
+                        onPressed: onRight,
+                      ),
                     ),
-                  ),
-                  Positioned(
-                    left: 78,
-                    bottom: 4,
-                    child: _DirectionControl(
-                      icon: Icons.keyboard_arrow_down_rounded,
-                      label: 'Down',
-                      onPressed: onDown,
+                    Positioned(
+                      left: 78,
+                      bottom: 4,
+                      child: _DirectionControl(
+                        icon: Icons.keyboard_arrow_down_rounded,
+                        label: 'Down',
+                        onPressed: onDown,
+                      ),
                     ),
-                  ),
-                  Positioned(
-                    left: 3,
-                    top: 83,
-                    child: _DirectionControl(
-                      icon: Icons.keyboard_arrow_left_rounded,
-                      label: 'Left',
-                      onPressed: onLeft,
+                    Positioned(
+                      left: 3,
+                      top: 83,
+                      child: _DirectionControl(
+                        icon: Icons.keyboard_arrow_left_rounded,
+                        label: 'Left',
+                        onPressed: onLeft,
+                      ),
                     ),
-                  ),
-                  Center(child: _SelectControl(onPressed: onSelect)),
-                ],
+                    Center(child: _SelectControl(onPressed: onSelect)),
+                  ],
+                ),
               ),
             ),
           ),

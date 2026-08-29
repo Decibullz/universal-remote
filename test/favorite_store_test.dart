@@ -45,4 +45,20 @@ void main() {
       bedroom.map((favorite) => favorite.title),
     );
   });
+
+  test('preserves reordered, partial, and empty favorite sets', () async {
+    const partial = [
+      TvAppInfo(id: 'plex', title: 'Plex'),
+      TvAppInfo(id: 'hulu', title: 'Hulu'),
+    ];
+
+    await FavoriteStore.instance.save('partial-tv', partial);
+    expect(
+      (await FavoriteStore.instance.load('partial-tv')).map((app) => app.id),
+      ['plex', 'hulu'],
+    );
+
+    await FavoriteStore.instance.save('empty-tv', const []);
+    expect(await FavoriteStore.instance.load('empty-tv'), isEmpty);
+  });
 }

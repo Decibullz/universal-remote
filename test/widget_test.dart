@@ -26,9 +26,8 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     SharedPreferences.setMockInitialValues({
-      'tv_remote.devices':
-          '[{"id":"living-room","name":"Living Room","brand":"roku",'
-              '"host":"127.0.0.1","port":8060,"model":"Test TV"}]',
+      'tv_remote.devices': '[{"id":"living-room","name":"Living Room","brand":"roku",'
+          '"host":"127.0.0.1","port":8060,"model":"Test TV"}]',
       'tv_remote.selected_device': 'living-room',
     });
 
@@ -49,19 +48,78 @@ void main() {
     expect(find.byKey(const Key('tv-current-app')), findsOneWidget);
     expect(
       tester.getSize(find.byKey(const Key('tv-status-panel'))).height,
-      64,
+      greaterThan(0),
     );
 
-    final dpadBounds = tester.getRect(
-      find.byKey(const Key('remote-dpad')),
+    final dpadWidths = <double>[];
+    for (final viewport in const [
+      Size(375, 667),
+      Size(390, 844),
+      Size(430, 932),
+      Size(768, 1024),
+    ]) {
+      tester.view.physicalSize = viewport;
+      await tester.pump();
+
+      final topBounds = tester.getRect(
+        find.byKey(const Key('remote-top-controls')),
+      );
+      final dpadBounds = tester.getRect(
+        find.byKey(const Key('remote-dpad')),
+      );
+      final bottomBounds = tester.getRect(
+        find.byKey(const Key('remote-bottom-controls')),
+      );
+
+      expect(topBounds.bottom, lessThanOrEqualTo(dpadBounds.top));
+      expect(dpadBounds.bottom, lessThanOrEqualTo(bottomBounds.top));
+      expect(dpadBounds.center.dx, closeTo(viewport.width / 2, 0.1));
+      expect(bottomBounds.bottom, lessThan(viewport.height));
+      dpadWidths.add(dpadBounds.width);
+    }
+
+    expect(dpadWidths.first, lessThan(dpadWidths[1]));
+    expect(dpadWidths[1], lessThan(dpadWidths[2]));
+    expect(dpadWidths[2], lessThan(dpadWidths.last));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('long press edits and removes a favorite on the remote', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    SharedPreferences.setMockInitialValues({
+      'tv_remote.devices': '[{"id":"living-room","name":"Living Room","brand":"roku",'
+          '"host":"127.0.0.1","port":8060,"model":"Test TV"}]',
+      'tv_remote.selected_device': 'living-room',
+    });
+
+    await tester.pumpWidget(const UniversalTvRemoteApp());
+    await tester.pumpAndSettle();
+
+    await tester.longPress(
+      find.byKey(const Key('favorite-app-netflix')),
     );
-    final bottomControlsBounds = tester.getRect(
-      find.byKey(const Key('remote-bottom-controls')),
+    await tester.pump();
+
+    expect(find.byKey(const Key('editable-favorites-row')), findsOneWidget);
+    expect(find.text('Done'), findsOneWidget);
+    expect(
+      find.byKey(const Key('remove-favorite-netflix')),
+      findsOneWidget,
     );
 
-    expect(dpadBounds.center.dx, closeTo(195, 0.1));
-    expect(dpadBounds.center.dy, closeTo(422, 0.1));
-    expect(bottomControlsBounds.bottom, closeTo(840, 0.1));
+    await tester.tap(find.byKey(const Key('remove-favorite-netflix')));
+    await tester.pump();
+    await tester.tap(find.text('Done'));
+    await tester.pump();
+
+    expect(find.byKey(const Key('editable-favorites-row')), findsNothing);
+    expect(find.byKey(const Key('favorite-app-netflix')), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }
