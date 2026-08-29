@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:universal_tv_remote/controllers/tv_remote_controller.dart';
 import 'package:universal_tv_remote/models/tv_app_info.dart';
 import 'package:universal_tv_remote/models/tv_device.dart';
@@ -7,6 +9,7 @@ import 'package:universal_tv_remote/models/tv_status.dart';
 import 'package:universal_tv_remote/services/credential_store.dart';
 import 'package:universal_tv_remote/services/io_http.dart';
 import 'package:universal_tv_remote/services/vizio_app_catalog.dart';
+import 'package:universal_tv_remote/services/wake_on_lan_service.dart';
 import 'package:uuid/uuid.dart';
 
 class VizioPairingSession {
@@ -22,11 +25,16 @@ class VizioPairingSession {
 }
 
 class VizioController implements TvRemoteController {
-  VizioController(this.device, this.credentials);
+  VizioController(
+    this.device,
+    this.credentials, {
+    WakeOnLanService wakeOnLan = const WakeOnLanService(),
+  }) : _wakeOnLan = wakeOnLan;
 
   final TvDevice device;
   final CredentialStore credentials;
   final VizioAppCatalog _catalog = VizioAppCatalog();
+  final WakeOnLanService _wakeOnLan;
 
   String? _authToken;
   bool _connected = false;
@@ -93,6 +101,7 @@ class VizioController implements TvRemoteController {
 
     await _request('/state/device/power_mode');
     _connected = true;
+    await _rememberWakeAddresses();
   }
 
   Future<VizioPairingSession> startPairing() async {
@@ -157,6 +166,7 @@ class VizioController implements TvRemoteController {
     _authToken = token;
     await credentials.write(device.id, 'vizio_auth_token', token);
     _connected = true;
+    await _rememberWakeAddresses();
   }
 
   Future<void> _key(int codeset, int code) async {
@@ -258,7 +268,52 @@ class VizioController implements TvRemoteController {
   Future<void> playPause() => _key(2, 2);
 
   @override
+  Future<void> powerOn() async {
+    Object? commandError;
+    var commandSent = false;
+    try {
+      await _key(11, 1);
+      commandSent = true;
+    } catch (error) {
+      commandError = error;
+    }
+
+    final stored = await credentials.read(device.id, 'wake_macs');
+    final addresses = WakeOnLanService.findMacAddresses(stored);
+    if (addresses.isNotEmpty) {
+      await _wakeOnLan.wake(addresses, targetHost: device.host);
+      return;
+    }
+    if (commandSent) {
+      return;
+    }
+    throw TvRemoteException(
+      'Vizio power-on could not reach the TV ($commandError). Turn the TV '
+      'on once so Tv Remote can learn its wake address, and set its Power '
+      'Mode to Quick Start instead of Eco Mode.',
+    );
+  }
+
+  @override
   Future<void> powerOff() => _key(11, 0);
+
+  Future<void> _rememberWakeAddresses() async {
+    try {
+      final response = await _request(
+        '/menu_native/dynamic/tv_settings/system/system_information/network_information',
+      );
+      final addresses = WakeOnLanService.findMacAddresses(response);
+      if (addresses.isNotEmpty) {
+        await credentials.write(
+          device.id,
+          'wake_macs',
+          jsonEncode(addresses),
+        );
+      }
+    } catch (_) {
+      // Network details differ across SmartCast firmware generations.
+    }
+  }
 
   @override
   Future<void> sendText(String text) async {

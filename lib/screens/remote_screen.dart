@@ -507,6 +507,10 @@ class _RemoteScreenState extends State<RemoteScreen> {
     required bool connected,
     required List<TvAppInfo> favorites,
   }) {
+    final shouldTurnOn = !connected ||
+        _tvStatus?.powerState == TvPowerState.off;
+    final canUsePower = _connectionState != RemoteConnectionState.connecting;
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -516,7 +520,12 @@ class _RemoteScreenState extends State<RemoteScreen> {
           connectionState: _connectionState,
           onSelected: _selectDevice,
           onManage: _showManageDevices,
-          onPower: connected ? () => _confirmPowerOff(selected) : null,
+          powerOn: shouldTurnOn,
+          onPower: canUsePower
+              ? () => shouldTurnOn
+                  ? _turnOn(selected)
+                  : _confirmPowerOff(selected)
+              : null,
         ),
         const SizedBox(height: 10),
         _TvStatusPanel(
@@ -798,10 +807,7 @@ class _RemoteScreenState extends State<RemoteScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Turn off ${device.name}?'),
-        content: const Text(
-          'Power-on is intentionally not included because LG/Vizio wake-up '
-          'normally requires broadcast or multicast networking on iPhone.',
-        ),
+        content: const Text('The TV will remain available for network wake-up.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -817,6 +823,53 @@ class _RemoteScreenState extends State<RemoteScreen> {
 
     if (confirmed == true) {
       await _run(_controller!.powerOff, refreshStatus: true);
+    }
+  }
+
+  Future<void> _turnOn(TvDevice device) async {
+    final controller = _controller;
+    if (controller == null || _selected?.id != device.id) {
+      return;
+    }
+
+    setState(() {
+      _connectionState = RemoteConnectionState.connecting;
+      _connectionError = null;
+      _tvStatus = const TvStatus(powerState: TvPowerState.unknown);
+    });
+
+    try {
+      await controller.powerOn();
+    } catch (error) {
+      if (!mounted || _selected?.id != device.id) {
+        return;
+      }
+      setState(() {
+        _connectionState = RemoteConnectionState.error;
+        _connectionError = error.toString();
+        _tvStatus = const TvStatus(powerState: TvPowerState.off);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+      return;
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Turning on ${device.name}…')),
+      );
+    }
+
+    for (var attempt = 0; attempt < 3; attempt++) {
+      await Future<void>.delayed(const Duration(seconds: 2));
+      if (!mounted || _selected?.id != device.id) {
+        return;
+      }
+      await _connect(device);
+      if (_connectionState == RemoteConnectionState.connected) {
+        return;
+      }
     }
   }
 
@@ -886,6 +939,7 @@ class _RemoteHeader extends StatelessWidget {
     required this.connectionState,
     required this.onSelected,
     required this.onManage,
+    required this.powerOn,
     required this.onPower,
   });
 
@@ -894,6 +948,7 @@ class _RemoteHeader extends StatelessWidget {
   final RemoteConnectionState connectionState;
   final ValueChanged<TvDevice> onSelected;
   final VoidCallback onManage;
+  final bool powerOn;
   final VoidCallback? onPower;
 
   @override
@@ -960,10 +1015,10 @@ class _RemoteHeader extends StatelessWidget {
         ),
         const SizedBox(width: 8),
         _HeaderIconButton(
-          tooltip: 'Power off',
+          tooltip: powerOn ? 'Power on' : 'Power off',
           icon: Icons.power_settings_new_rounded,
           onPressed: onPower,
-          destructive: true,
+          destructive: !powerOn,
         ),
       ],
     );

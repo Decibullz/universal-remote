@@ -27,6 +27,7 @@ abstract interface class TvRemoteController {
   Future<void> mute();
 
   Future<void> playPause();
+  Future<void> powerOn();
   Future<void> powerOff();
 
   Future<void> sendText(String text);

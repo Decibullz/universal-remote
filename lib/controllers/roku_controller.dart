@@ -122,6 +122,9 @@ class RokuController implements TvRemoteController {
   Future<void> playPause() => _keypress('Play');
 
   @override
+  Future<void> powerOn() => _keypress('PowerOn');
+
+  @override
   Future<void> powerOff() => _keypress('PowerOff');
 
   @override

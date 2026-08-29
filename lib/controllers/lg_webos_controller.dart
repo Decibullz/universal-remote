@@ -9,6 +9,7 @@ import 'package:universal_tv_remote/models/tv_favorite.dart';
 import 'package:universal_tv_remote/models/tv_input_info.dart';
 import 'package:universal_tv_remote/models/tv_status.dart';
 import 'package:universal_tv_remote/services/credential_store.dart';
+import 'package:universal_tv_remote/services/wake_on_lan_service.dart';
 
 typedef LgRequestHandler = Future<Map<String, dynamic>> Function(
   String uri,
@@ -20,11 +21,14 @@ class LgWebOsController implements TvRemoteController {
     this.device,
     this.credentials, {
     LgRequestHandler? requestHandler,
-  }) : _requestHandler = requestHandler;
+    WakeOnLanService wakeOnLan = const WakeOnLanService(),
+  })  : _requestHandler = requestHandler,
+        _wakeOnLan = wakeOnLan;
 
   final TvDevice device;
   final CredentialStore credentials;
   final LgRequestHandler? _requestHandler;
+  final WakeOnLanService _wakeOnLan;
 
   WebSocket? _socket;
   WebSocket? _inputSocket;
@@ -60,6 +64,7 @@ class LgWebOsController implements TvRemoteController {
       }
 
       await _register();
+      await _rememberWakeAddresses();
       final pointer = await _request(
         'com.webos.service.networkinput/getPointerInputSocket',
       );
@@ -414,8 +419,41 @@ class LgWebOsController implements TvRemoteController {
   }
 
   @override
+  Future<void> powerOn() async {
+    final stored = await credentials.read(device.id, 'wake_macs');
+    final addresses = WakeOnLanService.findMacAddresses(stored);
+    if (addresses.isEmpty) {
+      throw const TvRemoteException(
+        'Turn this LG TV on once so Tv Remote can learn its wake address. '
+        'Also enable Settings > General > Devices > External Devices > '
+        'TV On With Mobile > Turn On via Wi-Fi.',
+      );
+    }
+    await _wakeOnLan.wake(addresses, targetHost: device.host);
+  }
+
+  @override
   Future<void> powerOff() async {
     await _request('system/turnOff');
+  }
+
+  Future<void> _rememberWakeAddresses() async {
+    try {
+      final networkInfo = await _request(
+        'com.webos.service.connectionmanager/getinfo',
+        timeout: const Duration(seconds: 3),
+      );
+      final addresses = WakeOnLanService.findMacAddresses(networkInfo);
+      if (addresses.isNotEmpty) {
+        await credentials.write(
+          device.id,
+          'wake_macs',
+          jsonEncode(addresses),
+        );
+      }
+    } catch (_) {
+      // Older webOS versions may not expose network interface information.
+    }
   }
 
   @override
